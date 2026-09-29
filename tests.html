@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Snake: testy logiki</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      background: #10141c;
+      color: #e2e8f0;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 14px;
+    }
+    h1 { font-family: system-ui, sans-serif; font-size: 20px; margin: 0 0 12px; }
+    #summary { font-weight: 700; margin-bottom: 16px; }
+    .pass { color: #4ade80; }
+    .fail { color: #ef4444; }
+    li { margin: 2px 0; }
+    .detail { color: #94a3b8; margin-left: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Snake: testy logiki</h1>
+  <div id="summary"></div>
+  <ol id="results"></ol>
+
+  <script src="snake-logic.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      var L = window.SnakeLogic;
+      var D = L.DIRECTIONS;
+      var results = [];
+
+      function test(name, fn) {
+        try {
+          fn();
+          results.push({ name: name, ok: true });
+        } catch (e) {
+          results.push({ name: name, ok: false, error: e.message });
+        }
+      }
+
+      function assert(cond, msg) {
+        if (!cond) throw new Error(msg || 'asercja nie przeszła');
+      }
+
+      function eq(actual, expected, msg) {
+        var a = JSON.stringify(actual);
+        var b = JSON.stringify(expected);
+        if (a !== b) throw new Error((msg ? msg + ': ' : '') + 'oczekiwano ' + b + ', jest ' + a);
+      }
+
+      // rng zawsze zwracający tę samą wartość, dla deterministycznego losowania jedzenia.
+      function fixedRng(v) {
+        return function () { return v; };
+      }
+
+      // Stan w trakcie gry z jawnie podanym wężem, kierunkiem i jedzeniem.
+      function runningState(snake, direction, food) {
+        var s = L.createState(fixedRng(0));
+        s.snake = snake.map(function (c) { return { x: c.x, y: c.y }; });
+        s.direction = { x: direction.x, y: direction.y };
+        s.food = food;
+        s.status = 'running';
+        return s;
+      }
+
+      // Wąż wypełniający planszę wierszami (wężykiem), z pominięciem podanych pól.
+      function serpentine(cols, rows, skip) {
+        var cells = [];
+        for (var y = 0; y < rows; y++) {
+          for (var i = 0; i < cols; i++) {
+            var x = y % 2 === 0 ? i : cols - 1 - i;
+            var skipped = skip.some(function (c) { return c.x === x && c.y === y; });
+            if (!skipped) cells.push({ x: x, y: y });
+          }
+        }
+        return cells;
+      }
+
+      var FAR_FOOD = { x: 0, y: 0 };
+
+      test('1. createState: długość 3, status ready, punkty 0, interwał 125', function () {
+        var s = L.createState();
+        eq(s.snake.length, 3, 'długość');
+        eq(s.status, 'ready', 'status');
+        eq(s.score, 0, 'punkty');
+        eq(s.intervalMs, 125, 'interwał');
+        eq(s.snake[0], { x: 10, y: 10 }, 'głowa');
+        eq(s.direction, D.right, 'kierunek');
+      });
+
+      test('2. Krok bez jedzenia: długość bez zmian, głowa przesunięta o wektor', function () {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, FAR_FOOD);
+        L.step(s);
+        eq(s.snake.length, 3, 'długość');
+        eq(s.snake[0], { x: 11, y: 10 }, 'głowa');
+      });
+
+      test('3. Krok bez jedzenia: ostatni segment znika', function () {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, FAR_FOOD);
+        L.step(s);
+        var stillThere = s.snake.some(function (c) { return c.x === 8 && c.y === 10; });
+        assert(!stillThere, 'pole (8,10) nadal zajęte');
+      });
+
+      test('4. Zjedzenie: długość +1, punkty +1', function () {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, { x: 11, y: 10 });
+        L.step(s);
+        eq(s.snake.length, 4, 'długość');
+        eq(s.score, 1, 'punkty');
+      });
+
+      test('5. Zjedzenie: nowe jedzenie na wolnym polu', function () {
+        for (var r = 0; r < 20; r++) {
+          var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, { x: 11, y: 10 });
+          L.step(s, fixedRng(r / 20));
+          assert(s.food !== null, 'brak jedzenia');
+          var onSnake = s.snake.some(function (c) { return c.x === s.food.x && c.y === s.food.y; });
+          assert(!onSnake, 'jedzenie na wężu dla rng=' + r / 20);
+        }
+      });
+
+      test('6. Zjedzenie: interwał maleje o 4 ms', function () {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, { x: 11, y: 10 });
+        L.step(s);
+        eq(s.intervalMs, 121);
+      });
+
+      test('7. Interwał nie schodzi poniżej 55 ms', function () {
+        var s = runningState([{ x: 0, y: 5 }], D.right, { x: 1, y: 5 });
+        // 18 zjedzeń: 125 - 18*4 = 53, więc limit 55 musi zadziałać, a wąż (19 pól) mieści się w wierszu.
+        for (var i = 0; i < 18; i++) {
+          var head = s.snake[0];
+          s.food = { x: (head.x + 1) % s.cols, y: head.y };
+          L.step(s);
+        }
+        eq(s.status, 'running', 'status');
+        eq(s.intervalMs, 55, 'interwał');
+      });
+
+      test('8a. Wyjście przez lewą krawędź → prawa krawędź, gra trwa', function () {
+        var s = runningState([{ x: 0, y: 5 }, { x: 1, y: 5 }, { x: 2, y: 5 }], D.left, FAR_FOOD);
+        L.step(s);
+        eq(s.snake[0], { x: 19, y: 5 });
+        eq(s.status, 'running');
+      });
+
+      test('8b. Wyjście przez prawą krawędź → lewa krawędź, gra trwa', function () {
+        var s = runningState([{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }], D.right, FAR_FOOD);
+        L.step(s);
+        eq(s.snake[0], { x: 0, y: 5 });
+        eq(s.status, 'running');
+      });
+
+      test('8c. Wyjście przez górną krawędź → dolna krawędź, gra trwa', function () {
+        var s = runningState([{ x: 5, y: 0 }, { x: 5, y: 1 }, { x: 5, y: 2 }], D.up, FAR_FOOD);
+        L.step(s);
+        eq(s.snake[0], { x: 5, y: 19 });
+        eq(s.status, 'running');
+      });
+
+      test('8d. Wyjście przez dolną krawędź → górna krawędź, gra trwa', function () {
+        var s = runningState([{ x: 5, y: 19 }, { x: 5, y: 18 }, { x: 5, y: 17 }], D.down, FAR_FOOD);
+        L.step(s);
+        eq(s.snake[0], { x: 5, y: 0 });
+        eq(s.status, 'running');
+      });
+
+      test('9. Zawinięcie nie zmienia długości ani punktów', function () {
+        var s = runningState([{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }], D.right, FAR_FOOD);
+        s.score = 7;
+        L.step(s);
+        eq(s.snake.length, 3, 'długość');
+        eq(s.score, 7, 'punkty');
+      });
+
+      test('10. Jedzenie na przeciwległym brzegu zjedzone po zawinięciu', function () {
+        var s = runningState([{ x: 19, y: 5 }, { x: 18, y: 5 }, { x: 17, y: 5 }], D.right, { x: 0, y: 5 });
+        L.step(s);
+        eq(s.snake[0], { x: 0, y: 5 }, 'głowa');
+        eq(s.score, 1, 'punkty');
+        eq(s.snake.length, 4, 'długość');
+      });
+
+      test('11. Zawinięcie na własne ciało kończy grę', function () {
+        // Głowa przy lewej krawędzi, ciało zawinięte na prawej w tym samym wierszu.
+        var s = runningState(
+          [{ x: 0, y: 5 }, { x: 0, y: 4 }, { x: 19, y: 4 }, { x: 19, y: 5 }, { x: 19, y: 6 }],
+          D.left, FAR_FOOD
+        );
+        L.step(s);
+        eq(s.status, 'over');
+      });
+
+      test('12. Wejście w środkowy segment kończy grę', function () {
+        var s = runningState(
+          [{ x: 5, y: 5 }, { x: 6, y: 5 }, { x: 6, y: 6 }, { x: 5, y: 6 }, { x: 4, y: 6 }],
+          D.down, FAR_FOOD
+        );
+        L.step(s);
+        eq(s.status, 'over');
+      });
+
+      test('13. Wejście na pole zwalniane przez ogon nie kończy gry', function () {
+        var s = runningState(
+          [{ x: 5, y: 5 }, { x: 6, y: 5 }, { x: 6, y: 6 }, { x: 5, y: 6 }],
+          D.down, FAR_FOOD
+        );
+        L.step(s);
+        eq(s.status, 'running', 'status');
+        eq(s.snake[0], { x: 5, y: 6 }, 'głowa');
+        eq(s.snake.length, 4, 'długość');
+      });
+
+      test('14. enqueueDirection odrzuca kierunek przeciwny i zwraca false', function () {
+        var s = L.createState();
+        eq(L.enqueueDirection(s, D.left), false);
+        eq(s.queue.length, 0);
+      });
+
+      test('15. enqueueDirection odrzuca kierunek identyczny z bieżącym', function () {
+        var s = L.createState();
+        eq(L.enqueueDirection(s, D.right), false);
+        eq(s.queue.length, 0);
+      });
+
+      test('16. Dwa skręty między krokami wykonane w dwóch kolejnych krokach', function () {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, FAR_FOOD);
+        eq(L.enqueueDirection(s, D.up), true, 'pierwszy skręt');
+        eq(L.enqueueDirection(s, D.left), true, 'drugi skręt');
+        L.step(s);
+        eq(s.direction, D.up, 'kierunek po 1. kroku');
+        eq(s.snake[0], { x: 10, y: 9 }, 'głowa po 1. kroku');
+        L.step(s);
+        eq(s.direction, D.left, 'kierunek po 2. kroku');
+        eq(s.snake[0], { x: 9, y: 9 }, 'głowa po 2. kroku');
+        eq(s.status, 'running', 'status');
+      });
+
+      test('17. Kolejka nie przyjmuje trzeciego kierunku', function () {
+        var s = L.createState();
+        eq(L.enqueueDirection(s, D.up), true);
+        eq(L.enqueueDirection(s, D.left), true);
+        eq(L.enqueueDirection(s, D.down), false);
+        eq(s.queue.length, 2);
+      });
+
+      test('18. Odrzucany kierunek przeciwny do ostatniego w kolejce', function () {
+        var s = L.createState();
+        eq(L.enqueueDirection(s, D.up), true);
+        // Dół jest przeciwny do „góra” z kolejki, choć nie do bieżącego „prawo”.
+        eq(L.enqueueDirection(s, D.down), false);
+        eq(s.queue.length, 1);
+      });
+
+      test('19. spawnFood na niemal pełnej planszy trafia w jedyne wolne pole', function () {
+        var s = L.createState();
+        var hole = { x: 13, y: 7 };
+        s.snake = serpentine(s.cols, s.rows, [hole]);
+        eq(s.snake.length, 399, 'długość węża');
+        [0, 0.5, 0.999999].forEach(function (v) {
+          L.spawnFood(s, fixedRng(v));
+          eq(s.food, hole, 'rng=' + v);
+        });
+      });
+
+      test('20. step na stanie ready, over i won nie zmienia niczego', function () {
+        ['ready', 'over', 'won'].forEach(function (status) {
+          var s = L.createState(fixedRng(0.3));
+          s.status = status;
+          L.enqueueDirection(s, D.up);
+          var before = JSON.stringify(s);
+          L.step(s);
+          eq(JSON.stringify(s), before, 'status ' + status);
+        });
+      });
+
+      test('21. Zapełnienie planszy ustawia status won', function () {
+        var s = L.createState();
+        var cells = serpentine(s.cols, s.rows, []);
+        // Wąż zajmuje wszystko poza ostatnim polem ścieżki; głowa stoi tuż przed nim.
+        var last = cells.pop();
+        s.snake = cells.reverse();
+        s.direction = { x: last.x - s.snake[0].x, y: last.y - s.snake[0].y };
+        s.food = last;
+        s.status = 'running';
+        L.step(s);
+        eq(s.snake.length, 400, 'długość');
+        eq(s.status, 'won', 'status');
+      });
+
+      var list = document.getElementById('results');
+      var passed = 0;
+      results.forEach(function (r) {
+        var li = document.createElement('li');
+        li.className = r.ok ? 'pass' : 'fail';
+        li.textContent = (r.ok ? 'OK    ' : 'BŁĄD  ') + r.name;
+        if (!r.ok) {
+          var d = document.createElement('span');
+          d.className = 'detail';
+          d.textContent = r.error;
+          li.appendChild(d);
+        }
+        list.appendChild(li);
+        if (r.ok) passed++;
+      });
+
+      var summary = document.getElementById('summary');
+      summary.className = passed === results.length ? 'pass' : 'fail';
+      summary.textContent = 'Zaliczone: ' + passed + ' / ' + results.length;
+      window.__testResults = results;
+    })();
+  </script>
+</body>
+</html>
