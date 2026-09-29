@@ -4,36 +4,63 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Snake</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --meadow: #e4efd9;
+      --hedge: #3d6b3a;
+      --hedge-deep: #2c5029;
+      --ink: #24401f;
+      --board: min(480px, calc(100vw - 32px));
+    }
     html, body {
       margin: 0;
       height: 100%;
-      background: #0b0e14;
-      color: #e2e8f0;
-      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--meadow);
+      color: var(--ink);
+      font-family: "Fredoka", system-ui, sans-serif;
     }
     body {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 12px;
+      gap: 14px;
+    }
+    header {
+      width: var(--board);
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+    }
+    h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 600;
+      color: var(--hedge);
     }
     #score {
       font-size: 20px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
+      font-weight: 400;
       font-variant-numeric: tabular-nums;
     }
     canvas {
       display: block;
-      border: 1px solid #1a2030;
-      border-radius: 4px;
+      width: var(--board);
+      height: auto;
+      border: 6px solid var(--hedge);
+      border-radius: 16px;
+      box-shadow: 0 8px 0 var(--hedge-deep);
     }
   </style>
 </head>
 <body>
-  <div id="score">Punkty: 0</div>
+  <header>
+    <h1>Królewski ogród</h1>
+    <div id="score">Punkty: 0</div>
+  </header>
   <canvas id="board" width="480" height="480"></canvas>
 
   <script src="snake-logic.js"></script>
@@ -44,13 +71,27 @@
       var L = window.SnakeLogic;
       var CELL = 24;
       var MAX_STEPS_PER_FRAME = 5;
+      var POP_MS = 260;
+      var FONT = '"Fredoka", system-ui, sans-serif';
       var COLORS = {
-        bg: '#10141c',
-        grid: '#1a2030',
-        body: '#22c55e',
-        head: '#4ade80',
-        food: '#ef4444',
-        text: '#e2e8f0'
+        lawnA: '#9ccc6e',
+        lawnB: '#90c063',
+        body: '#6b3fa0',
+        bodyEdge: '#452670',
+        head: '#8150c4',
+        spots: '#f2c14e',
+        eye: '#ffffff',
+        pupil: '#1c1030',
+        petals: ['#f06ba8', '#ffffff', '#5aa9f0', '#ff9a3c', '#e84855', '#b98cf0'],
+        flowerCenter: '#ffd23f',
+        flowerShadow: 'rgba(36, 64, 31, 0.18)',
+        crown: '#f5b829',
+        crownEdge: '#a86a12',
+        jewel: '#e0457b',
+        veil: 'rgba(36, 64, 31, 0.5)',
+        panel: '#f7fbf2',
+        panelEdge: '#3d6b3a',
+        text: '#24401f'
       };
 
       var KEY_TO_DIR = {
@@ -63,10 +104,13 @@
       var canvas = document.getElementById('board');
       var ctx = canvas.getContext('2d');
       var scoreEl = document.getElementById('score');
+      var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       var state = L.createState();
       var accumulator = 0;
       var lastTime = null;
+      var foodKey = null;
+      var foodBorn = 0;
 
       document.addEventListener('keydown', function (e) {
         var key = e.key.toLowerCase();
@@ -87,53 +131,194 @@
         }
       });
 
-      function drawGrid() {
-        ctx.fillStyle = COLORS.bg;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = COLORS.grid;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (var i = 1; i < state.cols; i++) {
-          ctx.moveTo(i * CELL + 0.5, 0);
-          ctx.lineTo(i * CELL + 0.5, canvas.height);
-        }
-        for (var j = 1; j < state.rows; j++) {
-          ctx.moveTo(0, j * CELL + 0.5);
-          ctx.lineTo(canvas.width, j * CELL + 0.5);
-        }
-        ctx.stroke();
+      function center(cell) {
+        return { x: cell.x * CELL + CELL / 2, y: cell.y * CELL + CELL / 2 };
       }
 
-      function drawCell(cell, color, inset) {
+      function circle(x, y, r, color) {
         ctx.fillStyle = color;
-        ctx.fillRect(cell.x * CELL + inset, cell.y * CELL + inset, CELL - inset * 2, CELL - inset * 2);
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      function drawLawn() {
+        for (var y = 0; y < state.rows; y++) {
+          for (var x = 0; x < state.cols; x++) {
+            ctx.fillStyle = (x + y) % 2 ? COLORS.lawnB : COLORS.lawnA;
+            ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+          }
+        }
+      }
+
+      function easeOutBack(t) {
+        var c = 1.7;
+        return 1 + (c + 1) * Math.pow(t - 1, 3) + c * Math.pow(t - 1, 2);
+      }
+
+      // Kolor płatków zależy od pozycji jedzenia, więc każdy nowy kwiatek ma zwykle inny kolor.
+      function drawFlower(cell, now) {
+        var key = cell.x + ',' + cell.y;
+        if (key !== foodKey) {
+          foodKey = key;
+          foodBorn = now;
+        }
+        var t = Math.min(1, (now - foodBorn) / POP_MS);
+        var scale = reducedMotion ? 1 : easeOutBack(t);
+        var c = center(cell);
+
+        ctx.save();
+        ctx.translate(c.x, c.y);
+        ctx.scale(scale, scale);
+
+        ctx.fillStyle = COLORS.flowerShadow;
+        ctx.beginPath();
+        ctx.ellipse(1, CELL * 0.36, CELL * 0.32, CELL * 0.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = COLORS.petals[(cell.x * 7 + cell.y * 13) % COLORS.petals.length];
+        for (var i = 0; i < 5; i++) {
+          var a = -Math.PI / 2 + i * (Math.PI * 2 / 5);
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(a) * CELL * 0.2, Math.sin(a) * CELL * 0.2, CELL * 0.2, CELL * 0.13, a, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        circle(0, 0, CELL * 0.13, COLORS.flowerCenter);
+        ctx.restore();
+      }
+
+      function isNeighbour(a, b) {
+        return Math.abs(a.x - b.x) + Math.abs(a.y - b.y) === 1;
+      }
+
+      function segmentRadius(i, n) {
+        return CELL * (0.4 - 0.14 * (i / Math.max(n - 1, 1)));
+      }
+
+      // Ciało jako jedna wstęga: łączniki tylko między sąsiednimi polami, żeby zawinięcie przez krawędź nie rysowało linii przez planszę.
+      function bodyPass(color, grow) {
+        var s = state.snake;
+        var n = s.length;
+        ctx.strokeStyle = color;
+        ctx.lineCap = 'round';
+        for (var i = n - 1; i >= 1; i--) {
+          var p = center(s[i]);
+          var r = segmentRadius(i, n) + grow;
+          if (isNeighbour(s[i], s[i - 1])) {
+            var q = center(s[i - 1]);
+            ctx.lineWidth = r * 2;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(q.x, q.y);
+            ctx.stroke();
+          }
+          circle(p.x, p.y, r, color);
+        }
+      }
+
+      function drawCrown(c) {
+        var w = CELL * 0.8;
+        var left = c.x - w / 2;
+        var right = c.x + w / 2;
+        var base = c.y - CELL * 0.26;
+        var tip = c.y - CELL * 0.78;
+        var side = c.y - CELL * 0.66;
+        var dip = c.y - CELL * 0.46;
+
+        ctx.fillStyle = COLORS.crown;
+        ctx.strokeStyle = COLORS.crownEdge;
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(left, base);
+        ctx.lineTo(left, side);
+        ctx.lineTo(left + w * 0.27, dip);
+        ctx.lineTo(c.x, tip);
+        ctx.lineTo(right - w * 0.27, dip);
+        ctx.lineTo(right, side);
+        ctx.lineTo(right, base);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        circle(left, side, CELL * 0.06, COLORS.crown);
+        circle(right, side, CELL * 0.06, COLORS.crown);
+        circle(c.x, tip, CELL * 0.07, COLORS.crown);
+        circle(c.x, base - CELL * 0.1, CELL * 0.07, COLORS.jewel);
+      }
+
+      function drawHead() {
+        var c = center(state.snake[0]);
+        var d = state.direction;
+        var r = CELL * 0.46;
+
+        circle(c.x, c.y, r + 1.5, COLORS.bodyEdge);
+        circle(c.x, c.y, r, COLORS.head);
+        drawCrown(c);
+
+        // Oczy patrzą w stronę ruchu; przy ruchu w górę zostają niżej, żeby nie chowały się pod koroną.
+        var fx = d.x * CELL * 0.14;
+        var fy = Math.max(d.y, 0) * CELL * 0.14;
+        var px = -d.y * CELL * 0.2;
+        var py = d.x * CELL * 0.2;
+        for (var k = -1; k <= 1; k += 2) {
+          var ex = c.x + fx + px * k;
+          var ey = c.y + fy + py * k;
+          circle(ex, ey, CELL * 0.12, COLORS.eye);
+          circle(ex + d.x * CELL * 0.04, ey + d.y * CELL * 0.04, CELL * 0.06, COLORS.pupil);
+        }
+      }
+
+      function drawSnake() {
+        bodyPass(COLORS.bodyEdge, 1.5);
+        bodyPass(COLORS.body, 0);
+        var s = state.snake;
+        for (var i = 2; i < s.length; i += 2) {
+          var p = center(s[i]);
+          circle(p.x, p.y, segmentRadius(i, s.length) * 0.32, COLORS.spots);
+        }
+        drawHead();
+      }
+
+      function roundRect(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
       }
 
       function drawOverlay(lines) {
-        ctx.fillStyle = 'rgba(16, 20, 28, 0.78)';
+        ctx.fillStyle = COLORS.veil;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        var h = 48 + lines.length * 36;
+        var w = canvas.width - 80;
+        var x = 40;
+        // Panel w dolnej części planszy, żeby nie zasłaniał węża startującego na środku.
+        var y = canvas.height * 0.72 - h / 2;
+        roundRect(x, y, w, h, 18);
+        ctx.fillStyle = COLORS.panel;
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = COLORS.panelEdge;
+        ctx.stroke();
+
         ctx.fillStyle = COLORS.text;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        var mid = canvas.height / 2 - (lines.length - 1) * 18;
         for (var i = 0; i < lines.length; i++) {
-          ctx.font = i === 0 ? '600 26px system-ui, sans-serif' : '18px system-ui, sans-serif';
-          ctx.fillText(lines[i], canvas.width / 2, mid + i * 36);
+          ctx.font = i === 0 ? '600 26px ' + FONT : '400 18px ' + FONT;
+          ctx.fillText(lines[i], canvas.width / 2, y + 42 + i * 36);
         }
       }
 
-      function render() {
-        drawGrid();
-
-        if (state.food) {
-          ctx.fillStyle = COLORS.food;
-          ctx.beginPath();
-          ctx.arc(state.food.x * CELL + CELL / 2, state.food.y * CELL + CELL / 2, CELL / 2 - 4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        for (var i = state.snake.length - 1; i >= 1; i--) drawCell(state.snake[i], COLORS.body, 2);
-        drawCell(state.snake[0], COLORS.head, 1);
+      function render(now) {
+        drawLawn();
+        if (state.food) drawFlower(state.food, now);
+        drawSnake();
 
         scoreEl.textContent = 'Punkty: ' + state.score;
 
@@ -164,7 +349,7 @@
           accumulator = 0;
         }
 
-        render();
+        render(now);
         requestAnimationFrame(frame);
       }
 
