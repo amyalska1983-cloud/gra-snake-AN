@@ -6,11 +6,11 @@
 
 ## 1. Cel i zakres
 
-Klasyczny Snake uruchamiany dwuklikiem na pliku `index.html`, bez serwera, bez `npm install`, bez kroku budowania. Wąż porusza się po siatce, zjada jedzenie, rośnie i przyspiesza; gra kończy się uderzeniem w ścianę lub we własne ciało.
+Klasyczny Snake uruchamiany dwuklikiem na pliku `index.html`, bez serwera, bez `npm install`, bez kroku budowania. Wąż porusza się po siatce, zjada jedzenie, rośnie i przyspiesza. Plansza zawija się na krawędziach — wyjście poza krawędź przenosi głowę na przeciwległą stronę, bez utraty gry. Jedynym końcem gry jest ugryzienie własnego ciała.
 
-**W zakresie:** siatka, ruch, jedzenie, wzrost, punktacja, rosnące tempo, kolizje, ekran startowy, ekran końca gry, ekran wygranej, restart, automatyczne testy logiki.
+**W zakresie:** siatka, ruch, jedzenie, wzrost, punktacja, rosnące tempo, zawijanie planszy na krawędziach, kolizja z własnym ciałem, ekran startowy, ekran końca gry, ekran wygranej, restart, automatyczne testy logiki.
 
-**Poza zakresem:** rekordy w `localStorage`, poziomy trudności, przeszkody, zawijanie planszy, bonusowe jedzenie, dźwięk, sterowanie dotykowe, tabela wyników, tryb dwuosobowy, animacje ruchu między komórkami.
+**Poza zakresem:** rekordy w `localStorage`, poziomy trudności, przeszkody, bonusowe jedzenie, dźwięk, sterowanie dotykowe, tabela wyników, tryb dwuosobowy, animacje ruchu między komórkami.
 
 ## 2. Struktura plików
 
@@ -63,8 +63,8 @@ Oś Y rośnie w dół (zgodnie z Canvas). Stan jest jedynym źródłem prawdy �
 1. Jeżeli `status !== 'running'` — brak zmian, wyjście.
 2. Zdejmij pierwszy kierunek z `queue` i ustaw jako `direction` (jeśli kolejka niepusta).
 3. Policz nową głowę: `head + direction`.
-4. **Kolizja ze ścianą:** jeśli nowa głowa wypada poza `0..cols-1` lub `0..rows-1` → `status = 'over'`, wyjście.
-5. **Kolizja z ciałem:** porównaj nową głowę z segmentami węża. Jeżeli głowa *nie* trafia na jedzenie, ostatni segment jest w tym kroku zwalniany i **nie liczy się** jako kolizja — wejście na zwalniane pole ogona jest legalne. Jeżeli głowa trafia na jedzenie, ogon nie ustępuje i liczy się całe ciało. Kolizja → `status = 'over'`, wyjście.
+4. **Zawijanie planszy:** jeśli nowa głowa wypada poza `0..cols-1` lub `0..rows-1`, przenieś ją na przeciwległą krawędź: `x = (x + cols) % cols`, `y = (y + rows) % rows`. Ściana nigdy nie kończy gry.
+5. **Kolizja z ciałem:** porównaj zawiniętą już głowę z segmentami węża. Jeżeli głowa *nie* trafia na jedzenie, ostatni segment jest w tym kroku zwalniany i **nie liczy się** jako kolizja — wejście na zwalniane pole ogona jest legalne. Jeżeli głowa trafia na jedzenie, ogon nie ustępuje i liczy się całe ciało. Kolizja → `status = 'over'`, wyjście.
 6. Dołóż nową głowę na początek `snake`.
 7. Jeśli głowa trafiła na jedzenie: `score += 1`, `intervalMs = max(55, intervalMs - 4)`, wylosuj nowe jedzenie. W przeciwnym razie usuń ostatni segment.
 8. Jeśli `snake.length === cols * rows` → `status = 'won'`.
@@ -119,17 +119,20 @@ Każdy punkt to osobna asercja; runner wypisuje nazwę i wynik.
 5. Zjedzenie jedzenia: nowe jedzenie pojawia się na polu wolnym od węża.
 6. Zjedzenie jedzenia: interwał maleje o 4 ms.
 7. Interwał nie schodzi poniżej 55 ms mimo dalszych zjedzeń.
-8. Wyjście poza lewą, prawą, górną i dolną krawędź ustawia `status: 'over'` (cztery przypadki).
-9. Wejście głową w środkowy segment ciała ustawia `status: 'over'`.
-10. Wejście na pole zwalniane przez ogon (bez jedzenia) **nie** kończy gry.
-11. `enqueueDirection` odrzuca kierunek przeciwny do bieżącego i zwraca `false`.
-12. `enqueueDirection` odrzuca kierunek identyczny z bieżącym.
-13. Dwa skręty dołożone między krokami są wykonane w dwóch kolejnych krokach, a nie zgubione.
-14. `enqueueDirection` nie przyjmuje trzeciego kierunku, gdy kolejka ma już 2 pozycje.
-15. Kierunek przeciwny do *ostatniego w kolejce* (nie do bieżącego) jest odrzucany.
-16. `spawnFood` z deterministycznym `rng` na planszy niemal pełnej trafia w jedyne wolne pole.
-17. `step` na stanie `'ready'`, `'over'` i `'won'` nie zmienia niczego.
-18. Zapełnienie planszy ustawia `status: 'won'`.
+8. Wyjście poza lewą, prawą, górną i dolną krawędź przenosi głowę na przeciwległą krawędź, a `status` pozostaje `'running'` (cztery przypadki).
+9. Zawinięcie przez krawędź nie zmienia długości węża ani punktów.
+10. Jedzenie leżące tuż za krawędzią (na przeciwległym brzegu) zostaje zjedzone po zawinięciu — punkty rosną o 1.
+11. Zawinięcie na pole zajęte przez własne ciało ustawia `status: 'over'`.
+12. Wejście głową w środkowy segment ciała ustawia `status: 'over'`.
+13. Wejście na pole zwalniane przez ogon (bez jedzenia) **nie** kończy gry.
+14. `enqueueDirection` odrzuca kierunek przeciwny do bieżącego i zwraca `false`.
+15. `enqueueDirection` odrzuca kierunek identyczny z bieżącym.
+16. Dwa skręty dołożone między krokami są wykonane w dwóch kolejnych krokach, a nie zgubione.
+17. `enqueueDirection` nie przyjmuje trzeciego kierunku, gdy kolejka ma już 2 pozycje.
+18. Kierunek przeciwny do *ostatniego w kolejce* (nie do bieżącego) jest odrzucany.
+19. `spawnFood` z deterministycznym `rng` na planszy niemal pełnej trafia w jedyne wolne pole.
+20. `step` na stanie `'ready'`, `'over'` i `'won'` nie zmienia niczego.
+21. Zapełnienie planszy ustawia `status: 'won'`.
 
 ### 9.2 Weryfikacja ręczna (`index.html`)
 
@@ -139,8 +142,8 @@ Każdy punkt to osobna asercja; runner wypisuje nazwę i wynik.
 4. Szybkie wciśnięcie dwóch strzałek pod rząd (np. góra, potem lewo) nie zabija węża.
 5. Po zjedzeniu licznik punktów rośnie, a wąż wydłuża się widocznie.
 6. Po kilkunastu punktach gra jest wyraźnie szybsza niż na starcie.
-7. Uderzenie w ścianę pokazuje nakładkę końca gry z poprawnym wynikiem.
-8. Ugryzienie własnego ciała pokazuje nakładkę końca gry.
+7. Dojście do krawędzi planszy przenosi węża na przeciwległą stronę i gra toczy się dalej — bez końca gry i bez utraty punktów.
+8. Ugryzienie własnego ciała pokazuje nakładkę końca gry z poprawnym wynikiem — to jedyny sposób na przegraną.
 9. Spacja po przegranej startuje nową grę od zera punktów i tempa startowego.
 10. Strzałki i spacja nie przewijają strony.
 11. Przełączenie na inną kartę na kilkanaście sekund i powrót nie powoduje skokowego przeskoku węża.
@@ -151,6 +154,6 @@ Każdy punkt to osobna asercja; runner wypisuje nazwę i wynik.
 |---|---|
 | Jeden plik `index.html` ze wszystkim inline | `tests.html` nie ma jak sięgnąć po skrypt inline z innego pliku; `fetch` po `file://` blokuje CORS. |
 | Moduły ES | Blokowane przez CORS przy `file://` — psuje uruchamianie dwuklikiem. |
-| Zawijanie planszy na krawędziach | Wybrano wariant klasyczny: ściana kończy grę. |
+| Koniec gry po uderzeniu w ścianę | Zastąpione zawijaniem planszy: wąż wychodzi poza krawędź i wraca po przeciwnej stronie. |
 | Siatka `<div>` zamiast Canvas | Wolniejsza i nietypowa dla gier 2D. |
 | Vitest / npm | Łamie założenie „bez instalacji i bez serwera". |
