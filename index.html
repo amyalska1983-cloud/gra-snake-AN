@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Snake</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #0b0e14;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+    #score {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    canvas {
+      display: block;
+      border: 1px solid #1a2030;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">Punkty: 0</div>
+  <canvas id="board" width="480" height="480"></canvas>
+
+  <script src="snake-logic.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      var L = window.SnakeLogic;
+      var CELL = 24;
+      var MAX_STEPS_PER_FRAME = 5;
+      var COLORS = {
+        bg: '#10141c',
+        grid: '#1a2030',
+        body: '#22c55e',
+        head: '#4ade80',
+        food: '#ef4444',
+        text: '#e2e8f0'
+      };
+
+      var KEY_TO_DIR = {
+        arrowup: 'up', w: 'up',
+        arrowdown: 'down', s: 'down',
+        arrowleft: 'left', a: 'left',
+        arrowright: 'right', d: 'right'
+      };
+
+      var canvas = document.getElementById('board');
+      var ctx = canvas.getContext('2d');
+      var scoreEl = document.getElementById('score');
+
+      var state = L.createState();
+      var accumulator = 0;
+      var lastTime = null;
+
+      document.addEventListener('keydown', function (e) {
+        var key = e.key.toLowerCase();
+        var dirName = KEY_TO_DIR[key];
+        var isRestartKey = key === ' ' || key === 'enter';
+
+        if (key.indexOf('arrow') === 0 || key === ' ') e.preventDefault();
+
+        if (dirName) {
+          if (state.status === 'ready') {
+            L.start(state);
+            accumulator = 0;
+          }
+          if (state.status === 'running') L.enqueueDirection(state, L.DIRECTIONS[dirName]);
+        } else if (isRestartKey && (state.status === 'over' || state.status === 'won')) {
+          state = L.createState();
+          accumulator = 0;
+        }
+      });
+
+      function drawGrid() {
+        ctx.fillStyle = COLORS.bg;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = COLORS.grid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (var i = 1; i < state.cols; i++) {
+          ctx.moveTo(i * CELL + 0.5, 0);
+          ctx.lineTo(i * CELL + 0.5, canvas.height);
+        }
+        for (var j = 1; j < state.rows; j++) {
+          ctx.moveTo(0, j * CELL + 0.5);
+          ctx.lineTo(canvas.width, j * CELL + 0.5);
+        }
+        ctx.stroke();
+      }
+
+      function drawCell(cell, color, inset) {
+        ctx.fillStyle = color;
+        ctx.fillRect(cell.x * CELL + inset, cell.y * CELL + inset, CELL - inset * 2, CELL - inset * 2);
+      }
+
+      function drawOverlay(lines) {
+        ctx.fillStyle = 'rgba(16, 20, 28, 0.78)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = COLORS.text;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        var mid = canvas.height / 2 - (lines.length - 1) * 18;
+        for (var i = 0; i < lines.length; i++) {
+          ctx.font = i === 0 ? '600 26px system-ui, sans-serif' : '18px system-ui, sans-serif';
+          ctx.fillText(lines[i], canvas.width / 2, mid + i * 36);
+        }
+      }
+
+      function render() {
+        drawGrid();
+
+        if (state.food) {
+          ctx.fillStyle = COLORS.food;
+          ctx.beginPath();
+          ctx.arc(state.food.x * CELL + CELL / 2, state.food.y * CELL + CELL / 2, CELL / 2 - 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        for (var i = state.snake.length - 1; i >= 1; i--) drawCell(state.snake[i], COLORS.body, 2);
+        drawCell(state.snake[0], COLORS.head, 1);
+
+        scoreEl.textContent = 'Punkty: ' + state.score;
+
+        if (state.status === 'ready') {
+          drawOverlay(['Strzałki lub WSAD — start']);
+        } else if (state.status === 'over') {
+          drawOverlay(['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra']);
+        } else if (state.status === 'won') {
+          drawOverlay(['Wygrana! Plansza zapełniona', 'Spacja — nowa gra']);
+        }
+      }
+
+      function frame(now) {
+        if (lastTime === null) lastTime = now;
+        var dt = now - lastTime;
+        lastTime = now;
+
+        if (state.status === 'running') {
+          // Górny limit akumulatora chroni przed lawiną kroków po powrocie z nieaktywnej karty.
+          accumulator = Math.min(accumulator + dt, state.intervalMs * MAX_STEPS_PER_FRAME);
+          var steps = 0;
+          while (accumulator >= state.intervalMs && state.status === 'running' && steps < MAX_STEPS_PER_FRAME) {
+            accumulator -= state.intervalMs;
+            L.step(state);
+            steps++;
+          }
+        } else {
+          accumulator = 0;
+        }
+
+        render();
+        requestAnimationFrame(frame);
+      }
+
+      requestAnimationFrame(frame);
+    })();
+  </script>
+</body>
+</html>
