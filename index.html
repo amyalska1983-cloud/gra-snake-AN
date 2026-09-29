@@ -47,8 +47,7 @@
       var COLORS = {
         bg: '#10141c',
         grid: '#1a2030',
-        body: '#22c55e',
-        head: '#4ade80',
+        head: '#ffffff',
         food: '#ef4444',
         text: '#e2e8f0'
       };
@@ -109,6 +108,11 @@
         ctx.fillRect(cell.x * CELL + inset, cell.y * CELL + inset, CELL - inset * 2, CELL - inset * 2);
       }
 
+      // Tęcza wzdłuż ciała: każdy segment przesunięty o stały odcień.
+      function bodyColor(index) {
+        return 'hsl(' + ((index * 25) % 360) + ', 90%, 60%)';
+      }
+
       function drawOverlay(lines) {
         ctx.fillStyle = 'rgba(16, 20, 28, 0.78)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -132,7 +136,7 @@
           ctx.fill();
         }
 
-        for (var i = state.snake.length - 1; i >= 1; i--) drawCell(state.snake[i], COLORS.body, 2);
+        for (var i = state.snake.length - 1; i >= 1; i--) drawCell(state.snake[i], bodyColor(i), 2);
         drawCell(state.snake[0], COLORS.head, 1);
 
         scoreEl.textContent = 'Punkty: ' + state.score;
