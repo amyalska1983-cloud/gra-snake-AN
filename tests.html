@@ -293,6 +293,33 @@
         eq(s.status, 'won', 'status');
       });
 
+      test('22. pause: running → paused, step na paused nic nie zmienia', function () {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, FAR_FOOD);
+        L.pause(s);
+        eq(s.status, 'paused', 'status');
+        var before = JSON.stringify(s);
+        L.step(s);
+        eq(JSON.stringify(s), before, 'stan po step');
+      });
+
+      test('23. resume: paused → running', function () {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, FAR_FOOD);
+        L.pause(s);
+        L.resume(s);
+        eq(s.status, 'running');
+      });
+
+      test('24. pause i resume nie ruszają statusów ready, over, won', function () {
+        ['ready', 'over', 'won'].forEach(function (status) {
+          var s = L.createState(fixedRng(0.3));
+          s.status = status;
+          L.pause(s);
+          eq(s.status, status, 'pause na ' + status);
+          L.resume(s);
+          eq(s.status, status, 'resume na ' + status);
+        });
+      });
+
       var list = document.getElementById('results');
       var passed = 0;
       results.forEach(function (r) {

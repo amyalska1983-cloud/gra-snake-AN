@@ -60,6 +60,14 @@
     if (state.status === 'ready') state.status = 'running';
   }
 
+  function pause(state) {
+    if (state.status === 'running') state.status = 'paused';
+  }
+
+  function resume(state) {
+    if (state.status === 'paused') state.status = 'running';
+  }
+
   function enqueueDirection(state, dir) {
     if (state.queue.length >= MAX_QUEUE) return false;
     var ref = state.queue.length ? state.queue[state.queue.length - 1] : state.direction;
@@ -113,6 +121,8 @@
     enqueueDirection: enqueueDirection,
     spawnFood: spawnFood,
     start: start,
+    pause: pause,
+    resume: resume,
     DIRECTIONS: DIRECTIONS
   };
 })(window);
