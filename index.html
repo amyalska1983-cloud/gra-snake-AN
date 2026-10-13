@@ -46,6 +46,7 @@
       letter-spacing: 0.02em;
       font-variant-numeric: tabular-nums;
     }
+    #score .time.low { color: #ff6b5a; }
     .stage {
       perspective: 1000px;
     }
@@ -317,7 +318,7 @@
     </div>
   </div>
   <h1>Syk dżungli</h1>
-  <div id="score">Punkty: 0</div>
+  <div id="score">Punkty: <span class="pts">0</span> · Czas: <span class="time">1:00</span></div>
   <div id="player" class="panel">
     <form id="login-form" hidden>
       <input id="email" type="email" required placeholder="Twój e-mail" autocomplete="email">
@@ -441,6 +442,12 @@
       var canvas = document.getElementById('board');
       var ctx = canvas.getContext('2d');
       var scoreEl = document.getElementById('score');
+      var scorePts = scoreEl.querySelector('.pts');
+      var timeEl = scoreEl.querySelector('.time');
+
+      function isFinished() {
+        return state.status === 'over' || state.status === 'won' || state.status === 'timeup';
+      }
       var C = window.SnakeCloud;
       var loginForm = document.getElementById('login-form');
       var nickForm = document.getElementById('nick-form');
@@ -510,7 +517,8 @@
 
       function onGameEnd() {
         if (!player) return;
-        submitScore(state.score, state.status, playMs, false);
+        // Baza zna tylko 'over' i 'won'; koniec czasu to też przegrana.
+        submitScore(state.score, state.status === 'won' ? 'won' : 'over', playMs, false);
         discardSave();
       }
 
@@ -727,7 +735,7 @@
             accumulator = 0;
           }
           if (state.status === 'running') L.enqueueDirection(state, L.DIRECTIONS[dirName]);
-        } else if (isRestartKey && (state.status === 'over' || state.status === 'won')) {
+        } else if (isRestartKey && isFinished()) {
           state = L.createState();
           accumulator = 0;
           playMs = 0;
@@ -932,12 +940,19 @@
         drawFood(now);
         drawSnake();
 
-        scoreEl.textContent = 'Punkty: ' + state.score;
+        var leftS = Math.ceil(Math.max(0, L.TIME_LIMIT_MS - playMs) / 1000);
+        scorePts.textContent = state.score;
+        timeEl.textContent = Math.floor(leftS / 60) + ':' + (leftS % 60 < 10 ? '0' : '') + (leftS % 60);
+        timeEl.classList.toggle('low', leftS <= 10 && !isFinished());
 
         if (state.status === 'ready') {
           drawOverlay(resumeOffer
             ? ['Wznów grę (' + resumeOffer.state.score + ' pkt) — Enter', 'Nowa gra — N']
-            : ['Strzałki lub WSAD — start']);
+            : ['Strzałki lub WSAD — start', 'Masz 60 sekund']);
+        } else if (state.status === 'timeup') {
+          drawOverlay(player
+            ? ['Czas minął! · Punkty: ' + state.score, 'Spacja — nowa gra']
+            : ['Czas minął! · Punkty: ' + state.score, 'Spacja — nowa gra', 'Zaloguj się, aby zapisać wynik']);
         } else if (state.status === 'paused') {
           drawOverlay(['Pauza', 'P lub strzałka — wznów']);
         } else if (state.status === 'over') {
@@ -964,7 +979,8 @@
             L.step(state);
             steps++;
           }
-          if (state.status === 'over' || state.status === 'won') {
+          if (state.status === 'running' && playMs >= L.TIME_LIMIT_MS) L.timeUp(state);
+          if (isFinished()) {
             onGameEnd();
           } else if (now - lastSaveAt >= AUTOSAVE_MS) {
             saveNow(false);

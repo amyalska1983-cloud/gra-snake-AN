@@ -7,7 +7,7 @@
 
 ## 1. Cel i zakres
 
-Klasyczny Snake uruchamiany dwuklikiem na pliku `index.html`, bez serwera, bez `npm install`, bez kroku budowania. Wąż porusza się po siatce, zjada jedzenie, rośnie i przyspiesza. Plansza zawija się na krawędziach — wyjście poza krawędź przenosi głowę na przeciwległą stronę, bez utraty gry. Jedynym końcem gry jest ugryzienie własnego ciała.
+Klasyczny Snake uruchamiany dwuklikiem na pliku `index.html`, bez serwera, bez `npm install`, bez kroku budowania. Wąż porusza się po siatce, zjada jedzenie, rośnie i przyspiesza. Plansza zawija się na krawędziach — wyjście poza krawędź przenosi głowę na przeciwległą stronę, bez utraty gry. Gra trwa najwyżej 60 sekund czasu gry (pauza zatrzymuje zegar); wcześniej kończy ją tylko ugryzienie własnego ciała.
 
 **W zakresie:** siatka, ruch, jedzenie, wzrost, punktacja, rosnące tempo, zawijanie planszy na krawędziach, kolizja z własnym ciałem, ekran startowy, ekran końca gry, ekran wygranej, restart, automatyczne testy logiki.
 
@@ -41,6 +41,7 @@ Oba pliki HTML ładują logikę zwykłym `<script src="snake-logic.js"></script>
 | Interwał minimalny | 55 ms |
 | Punkty | +1 za jedzenie |
 | Wygrana | długość węża = 400 segmentów |
+| Limit czasu | 60 s czasu gry (`TIME_LIMIT_MS`), bez pauz |
 
 ## 4. Model stanu
 
@@ -54,7 +55,7 @@ Oba pliki HTML ładują logikę zwykłym `<script src="snake-logic.js"></script>
   food: {x, y},
   score: 0,
   intervalMs: 125,
-  status: 'ready'         // 'ready' | 'running' | 'paused' | 'over' | 'won'
+  status: 'ready'         // 'ready' | 'running' | 'paused' | 'over' | 'won' | 'timeup'
 }
 ```
 
@@ -99,6 +100,8 @@ Jeden obiekt globalny `window.SnakeLogic`:
 | `start` | `(state) => void` | `'ready'` → `'running'`. |
 | `pause` | `(state) => void` | `'running'` → `'paused'`; inne statusy bez zmian. |
 | `resume` | `(state) => void` | `'paused'` → `'running'`; inne statusy bez zmian. |
+| `timeUp` | `(state) => void` | `'running'`/`'paused'` → `'timeup'`; inne statusy bez zmian. Czas odmierza warstwa prezentacji. |
+| `TIME_LIMIT_MS` | stała | 60000 |
 | `restoreState` | `(obj) => state \| null` | Waliduje zapisany stan (np. z bazy); zwraca kopię w `'paused'` z pustą kolejką albo `null` dla stanu niemożliwego. |
 | `DIRECTIONS` | stała | `{ up, down, left, right }` jako wektory. |
 
@@ -114,6 +117,7 @@ Jeden obiekt globalny `window.SnakeLogic`:
   - `paused` — „Pauza" + „P lub strzałka — wznów"
   - `over` — „Koniec gry · Punkty: N" + „Spacja — nowa gra"; niezalogowany gracz widzi dodatkowo „Zaloguj się, aby zapisać wynik"
   - `won` — „Wygrana! Plansza zapełniona" + „Spacja — nowa gra"
+  - `timeup` — „Czas minął! · Punkty: N" + „Spacja — nowa gra" (niezalogowanym także „Zaloguj się, aby zapisać wynik"); wynik trafia do bazy jako `'over'`
 - Motyw dżungli, tytuł „Syk dżungli": plansza w szachownicę `#1f4a1c`/`#1a4118` z fazą kafelków i winietą, wąż w odcieniach 66–96 (limonka → złoto) z cieniem i odblaskiem, głowa złota z oczami patrzącymi w kierunku ruchu, jedzenie `#ef4444` z listkiem, tło strony `tlo-dzungla/tlo-dzungla.jpg`.
 - Głowa odróżniona kolorem od ciała, żeby kierunek był czytelny.
 
