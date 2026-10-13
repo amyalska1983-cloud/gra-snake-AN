@@ -320,6 +320,61 @@
         });
       });
 
+      // Poprawny stan w trakcie gry, po przejściu przez JSON — tak jak wraca z bazy.
+      function savedState() {
+        var s = runningState([{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }], D.right, { x: 15, y: 15 });
+        return JSON.parse(JSON.stringify(s));
+      }
+
+      test('25. restoreState: poprawny stan → kopia w pauzie z pustą kolejką', function () {
+        var saved = savedState();
+        saved.queue = [{ x: 0, y: -1 }];
+        var r = L.restoreState(saved);
+        assert(r !== null, 'odrzucony poprawny stan');
+        assert(r !== saved && r.snake !== saved.snake, 'to nie jest kopia');
+        eq(r.status, 'paused', 'status');
+        eq(r.queue, [], 'kolejka');
+        eq(r.snake, saved.snake, 'wąż');
+        eq(r.food, saved.food, 'jedzenie');
+        eq(r.score, 0, 'punkty');
+        eq(r.intervalMs, 125, 'interwał');
+      });
+
+      test('26. restoreState: wąż zawinięty przez krawędź jest poprawny', function () {
+        var saved = savedState();
+        saved.snake = [{ x: 0, y: 5 }, { x: 19, y: 5 }, { x: 18, y: 5 }];
+        assert(L.restoreState(saved) !== null);
+      });
+
+      test('27. restoreState: stan w pauzie też jest poprawny', function () {
+        var saved = savedState();
+        saved.status = 'paused';
+        assert(L.restoreState(saved) !== null);
+      });
+
+      test('28. restoreState odrzuca stany niemożliwe', function () {
+        var cases = {
+          'null': function () { return null; },
+          'tekst': function () { return 'stan'; },
+          'zły cols': function (s) { s.cols = 30; return s; },
+          'status over': function (s) { s.status = 'over'; return s; },
+          'segment poza planszą': function (s) { s.snake[2] = { x: 20, y: 10 }; return s; },
+          'niecałkowita współrzędna': function (s) { s.snake[2] = { x: 8.5, y: 10 }; return s; },
+          'rozerwany wąż': function (s) { s.snake[2] = { x: 5, y: 10 }; return s; },
+          'duplikat segmentu': function (s) { s.snake[2] = { x: 10, y: 10 }; return s; },
+          'za krótki wąż': function (s) { s.snake = [{ x: 10, y: 10 }, { x: 9, y: 10 }]; return s; },
+          'zły kierunek': function (s) { s.direction = { x: 1, y: 1 }; return s; },
+          'brak jedzenia': function (s) { s.food = null; return s; },
+          'jedzenie na wężu': function (s) { s.food = { x: 9, y: 10 }; return s; },
+          'punkty niezgodne z długością': function (s) { s.score = 5; return s; },
+          'interwał za duży': function (s) { s.intervalMs = 200; return s; },
+          'interwał za mały': function (s) { s.intervalMs = 10; return s; }
+        };
+        Object.keys(cases).forEach(function (name) {
+          eq(L.restoreState(cases[name](savedState())), null, name);
+        });
+      });
+
       var list = document.getElementById('results');
       var passed = 0;
       results.forEach(function (r) {
