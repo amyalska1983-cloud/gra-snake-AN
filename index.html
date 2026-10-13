@@ -165,6 +165,63 @@
       var leadersEl = document.getElementById('leaders');
 
       var player = null;       // { nick } gdy zalogowany i z nickiem — tylko wtedy zapisujemy
+      var resumeOffer = null;  // { state, playMs } — zapis czekający na decyzję gracza
+      var lastSaveAt = 0;
+      var AUTOSAVE_MS = 5000;
+
+      // Zapisy idą po kolei: autozapis wysłany tuż przed końcem gry nie może
+      // dotrzeć po skasowaniu zapisu i „wskrzesić" zakończonej gry.
+      var writes = Promise.resolve();
+      function queueWrite(fn) {
+        writes = writes.then(fn);
+        return writes;
+      }
+
+      function canSave() {
+        return !!player && (state.status === 'running' || state.status === 'paused');
+      }
+
+      function saveNow(keepalive) {
+        if (!canSave()) return;
+        lastSaveAt = performance.now();
+        // Kopia teraz, bo stan zmieni się, zanim zapis wyjdzie z kolejki.
+        var payload = JSON.parse(JSON.stringify({ state: state, playMs: playMs }));
+        queueWrite(function () {
+          return C.saveGame(payload, keepalive).then(function (r) {
+            if (r.ok) return;
+            say(errorText(r));
+            if (r.error === 'session_expired') {
+              player = null;
+              setView('login');
+            }
+          });
+        });
+      }
+
+      function discardSave() {
+        queueWrite(function () { return C.deleteGame(); });
+      }
+
+      function submitScore(score, result, ms, retried) {
+        queueWrite(function () {
+          return C.submitScore(score, result, ms).then(function (r) {
+            if (r.ok) {
+              say('Wynik zapisany');
+              refreshLeaderboard();
+            } else if (!retried) {
+              setTimeout(function () { submitScore(score, result, ms, true); }, 3000);
+            } else {
+              say(r.error === 'network' ? 'Brak połączenia — wynik nie zapisany' : errorText(r));
+            }
+          });
+        });
+      }
+
+      function onGameEnd() {
+        if (!player) return;
+        submitScore(state.score, state.status, playMs, false);
+        discardSave();
+      }
 
       var ERRORS = {
         network: 'Brak połączenia — zapis niedostępny',
@@ -219,7 +276,21 @@
         });
       }
 
-      function onPlayerReady() {}
+      function onPlayerReady() {
+        C.loadGame().then(function (r) {
+          if (!r.ok || !r.data) return;
+          var payload = r.data.state;
+          var restored = payload && L.restoreState(payload.state);
+          if (!restored) {
+            discardSave();
+            say('Zapis uszkodzony — zaczynasz od nowa');
+            return;
+          }
+          // Gra zaczęta, zanim zapis zdążył się wczytać, ma pierwszeństwo.
+          if (state.status !== 'ready') return;
+          resumeOffer = { state: restored, playMs: Number(payload.playMs) || 0 };
+        });
+      }
 
       function refreshLeaderboard() {
         C.getLeaderboard().then(function (r) {
@@ -304,6 +375,20 @@
 
         if (key.indexOf('arrow') === 0 || key === ' ') e.preventDefault();
 
+        // Dopóki gracz nie wybierze „wznów" albo „nowa gra", inne klawisze nic nie robią.
+        if (resumeOffer && state.status === 'ready') {
+          if (key === 'enter') {
+            state = resumeOffer.state;
+            playMs = resumeOffer.playMs;
+            resumeOffer = null;
+            accumulator = 0;
+          } else if (key === 'n') {
+            resumeOffer = null;
+            discardSave();
+          }
+          return;
+        }
+
         if (key === 'p' || key === 'escape') {
           togglePause();
         } else if (dirName) {
@@ -326,11 +411,19 @@
       function togglePause() {
         if (state.status === 'running') {
           L.pause(state);
+          saveNow(false);
         } else if (state.status === 'paused') {
           L.resume(state);
           accumulator = 0;
         }
       }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden && state.status === 'running') {
+          L.pause(state);
+          saveNow(true);
+        }
+      });
 
       function roundRect(c, x, y, w, h, r) {
         c.beginPath();
@@ -516,11 +609,15 @@
         scoreEl.textContent = 'Punkty: ' + state.score;
 
         if (state.status === 'ready') {
-          drawOverlay(['Strzałki lub WSAD — start']);
+          drawOverlay(resumeOffer
+            ? ['Wznów grę (' + resumeOffer.state.score + ' pkt) — Enter', 'Nowa gra — N']
+            : ['Strzałki lub WSAD — start']);
         } else if (state.status === 'paused') {
           drawOverlay(['Pauza', 'P lub strzałka — wznów']);
         } else if (state.status === 'over') {
-          drawOverlay(['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra']);
+          drawOverlay(player
+            ? ['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra']
+            : ['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra', 'Zaloguj się, aby zapisać wynik']);
         } else if (state.status === 'won') {
           drawOverlay(['Wygrana! Plansza zapełniona', 'Spacja — nowa gra']);
         }
@@ -540,6 +637,11 @@
             accumulator -= state.intervalMs;
             L.step(state);
             steps++;
+          }
+          if (state.status === 'over' || state.status === 'won') {
+            onGameEnd();
+          } else if (now - lastSaveAt >= AUTOSAVE_MS) {
+            saveNow(false);
           }
         } else {
           accumulator = 0;
