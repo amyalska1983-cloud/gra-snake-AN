@@ -13,6 +13,11 @@
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     body {
+      /* min-height zamiast height: na niskich ekranach strona rośnie i się przewija, zamiast ucinać tytuł i planszę. */
+      height: auto;
+      min-height: 100%;
+      box-sizing: border-box;
+      padding: 16px 0;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -192,6 +197,95 @@
       from { transform: scaleX(1); }
       to { transform: scaleX(0.25); }
     }
+    /* Żaba ze zdjęcia łapie muchę. Scena ma początek w pyszczku żaby i jednostki w pikselach obrazu tła;
+       skrypt przesuwa ją i skaluje tak samo, jak przeglądarka skaluje tło (cover). Cykl: 9 s. */
+    .frog-scene { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+    .tongue {
+      position: absolute;
+      left: 0;
+      top: -2px;
+      width: 105px;
+      height: 4px;
+      border-radius: 2px;
+      background: #ff7a9a;
+      transform-origin: 0 50%;
+      transform: rotate(-25.3deg) scaleX(0);
+      animation: tongue 9s linear infinite;
+    }
+    .tongue::after {
+      content: '';
+      position: absolute;
+      right: -5px;
+      top: -3px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #ff5f87;
+    }
+    @keyframes tongue {
+      0%, 58% { transform: rotate(-25.3deg) scaleX(0); }
+      61%, 63% { transform: rotate(-25.3deg) scaleX(1); }
+      68%, 100% { transform: rotate(-25.3deg) scaleX(0); }
+    }
+    .fly { position: absolute; left: -5px; top: -4px; animation: buzz 9s linear infinite; }
+    .fly-body { position: relative; width: 16px; height: 12px; animation: jitter 0.12s linear infinite alternate; }
+    .fly-body::before {
+      content: '';
+      position: absolute;
+      inset: 1px 0;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 30%, #8a9a70, #0b0d08 65%);
+      /* jasna poświata, inaczej ciemna mucha znika na ciemnym tle */
+      box-shadow: 0 0 4px 1px rgba(255, 250, 200, 0.45);
+    }
+    .fly-wing {
+      position: absolute;
+      top: -4px;
+      width: 9px;
+      height: 7px;
+      border-radius: 50%;
+      background: rgba(210, 225, 245, 0.45);
+      transform-origin: 50% 100%;
+      animation: wing 0.05s linear infinite alternate;
+    }
+    .fly-wing.l { left: -3px; }
+    .fly-wing.r { left: 10px; }
+    @keyframes buzz {
+      0% { transform: translate(260px, -120px); opacity: 0; }
+      6% { transform: translate(180px, -95px); opacity: 1; }
+      14% { transform: translate(125px, -70px); }
+      22% { transform: translate(70px, -30px); }
+      30% { transform: translate(115px, -10px); }
+      38% { transform: translate(135px, -60px); }
+      46% { transform: translate(80px, -68px); }
+      54%, 63% { transform: translate(95px, -45px); opacity: 1; }
+      68% { transform: translate(2px, -1px) scale(0.6); opacity: 1; }
+      69%, 100% { transform: translate(2px, -1px) scale(0.6); opacity: 0; }
+    }
+    @keyframes jitter {
+      from { transform: translate(-1px, 1px); }
+      to { transform: translate(1px, -1px); }
+    }
+    @keyframes wing {
+      from { transform: scaleY(1); }
+      to { transform: scaleY(0.3); }
+    }
+    .gulp {
+      position: absolute;
+      left: -24px;
+      top: 5px;
+      width: 18px;
+      height: 12px;
+      border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(222, 228, 140, 0.55), rgba(222, 228, 140, 0) 70%);
+      opacity: 0;
+      animation: gulp 9s ease-in-out infinite;
+    }
+    @keyframes gulp {
+      0%, 68% { opacity: 0; transform: scale(0.6); }
+      71% { opacity: 1; transform: scale(1.15); }
+      76%, 100% { opacity: 0; transform: scale(0.6); }
+    }
     #fog-control {
       position: fixed;
       left: 16px;
@@ -205,7 +299,7 @@
     #fog-control input { width: 140px; accent-color: #8bc34a; cursor: pointer; }
     @media (prefers-reduced-motion: reduce) {
       .ambient * { animation: none !important; }
-      .butterfly { display: none; }
+      .butterfly, .frog-scene { display: none; }
     }
   </style>
 </head>
@@ -216,6 +310,11 @@
     <div class="mist"></div>
     <div class="butterfly" style="top: 18vh; --t: 26s; --delay: 2s"></div>
     <div class="butterfly back" style="top: 64vh; --t: 34s; --delay: 14s"></div>
+    <div class="frog-scene">
+      <div class="gulp"></div>
+      <div class="tongue"></div>
+      <div class="fly"><div class="fly-body"><span class="fly-wing l"></span><span class="fly-wing r"></span></div></div>
+    </div>
   </div>
   <h1>Syk dżungli</h1>
   <div id="score">Punkty: 0</div>
@@ -283,6 +382,20 @@
         '</svg>';
       var butterflies = document.querySelectorAll('.butterfly');
       for (var k = 0; k < butterflies.length; k++) butterflies[k].innerHTML = BUTTERFLY;
+
+      // Pyszczek żaby w pikselach obrazu tła (1672×941). Tło ma background-size: cover i jest przypięte
+      // do okna, więc punkt na ekranie liczymy tak samo jak przeglądarka: skala „cover” + wyśrodkowanie.
+      var BG_W = 1672, BG_H = 941, FROG_MOUTH = { x: 184, y: 738 };
+      var frogScene = document.querySelector('.frog-scene');
+      function placeFrog() {
+        var vw = window.innerWidth, vh = window.innerHeight;
+        var s = Math.max(vw / BG_W, vh / BG_H);
+        var x = (vw - BG_W * s) / 2 + FROG_MOUTH.x * s;
+        var y = (vh - BG_H * s) / 2 + FROG_MOUTH.y * s;
+        frogScene.style.transform = 'translate(' + x.toFixed(1) + 'px, ' + y.toFixed(1) + 'px) scale(' + s.toFixed(4) + ')';
+      }
+      placeFrog();
+      window.addEventListener('resize', placeFrog);
 
       var FOG_KEY = 'syk-dzungli.mgla';
       var fog = document.getElementById('fog');
