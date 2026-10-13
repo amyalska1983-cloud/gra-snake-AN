@@ -1,2 +1,7 @@
 supabase/.temp/
 .superpowers/
+node_modules/
+test-results/
+playwright-report/
+zrzuty/
+anna.png
