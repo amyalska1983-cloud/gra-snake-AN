@@ -1,7 +1,7 @@
 # Syk dżungli — wyniki i wznawianie gry (Supabase)
 
 - **Data:** 2026-10-13
-- **Status:** do przeglądu
+- **Status:** zatwierdzona, zaimplementowana
 - **Uzupełnia:** `wymagania-snake.md` (po wdrożeniu sekcje 1, 6 i 8 tamtej specyfikacji zostaną zaktualizowane)
 
 ## 1. Cel i zakres
@@ -56,9 +56,9 @@ Adres projektu i klucz `sb_publishable_…` wpisane w pliku — klucz publikowal
 
 | Funkcja | Endpoint |
 |---|---|
-| `sendMagicLink(email)` | `POST /auth/v1/otp` z `email_redirect_to` = bieżący adres strony |
+| `sendMagicLink(email)` | `POST /auth/v1/otp?redirect_to=…` (parametr zapytania) = bieżący adres strony |
 | `init()` | odczyt sesji z `#access_token=…&refresh_token=…` po powrocie z e-maila, czyszczenie hasha z paska adresu; sesja w `localStorage` |
-| `signOut()` | `POST /auth/v1/logout`, czyszczenie sesji |
+| `signOut()` | `POST /auth/v1/logout?scope=local` (tylko to urządzenie), czyszczenie sesji |
 | `getPlayer()` / `createPlayer(nick)` | `players` |
 | `saveGame(payload)` | upsert `saved_games` (`Prefer: resolution=merge-duplicates`) |
 | `loadGame()` / `deleteGame()` | `saved_games` |
@@ -78,7 +78,7 @@ Token dostępu odświeżany `refresh_token`em, gdy zostało mniej niż 60 s waż
 
 **Klawiatura:** gdy fokus jest w polu tekstowym, gra ignoruje klawisze — inaczej wpisanie „wsad" w nicku sterowałoby wężem.
 
-**Pauza:** `P` lub `Esc` przełącza `'running'` ↔ `'paused'`. Nakładka: „Pauza · P — wznów".
+**Pauza:** `P` lub `Esc` przełącza `'running'` ↔ `'paused'`. Nakładka: „Pauza" / „P lub strzałka — wznów".
 
 ## 7. Zapis i wznawianie
 
