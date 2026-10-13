@@ -173,7 +173,7 @@
       // dotrzeć po skasowaniu zapisu i „wskrzesić" zakończonej gry.
       var writes = Promise.resolve();
       function queueWrite(fn) {
-        writes = writes.then(fn);
+        writes = writes.then(fn).catch(function () {});
         return writes;
       }
 
@@ -340,6 +340,7 @@
         releaseFocus();
         C.signOut().then(function () {
           player = null;
+          resumeOffer = null;
           setView('login');
           say('Wylogowano');
         });
