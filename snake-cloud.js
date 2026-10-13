@@ -71,6 +71,9 @@
       });
     }, function () {
       return fail('network');
+    }).catch(function () {
+      // Zerwane połączenie w trakcie czytania odpowiedzi.
+      return fail('network');
     });
   }
 
@@ -82,8 +85,9 @@
         store(toSession(r.data));
         return { ok: true };
       }
-      // Bez sieci sesja zostaje na później; odrzucony refresh token oznacza wylogowanie.
-      if (r.error !== 'network') store(null);
+      // Tylko odrzucony refresh token (400/401) oznacza wylogowanie; przy braku sieci,
+      // 429 czy 5xx sesja zostaje na później.
+      if (r.status === 400 || r.status === 401) store(null);
       return r;
     });
   }
@@ -96,6 +100,9 @@
     return ready.then(function (r) {
       if (r.ok) return fn();
       return session ? r : fail('session_expired');
+    }).catch(function () {
+      // Wyjątek w fn (np. payload bez state) też ma wrócić jako { ok: false }.
+      return fail('client_error');
     });
   }
 
@@ -103,7 +110,10 @@
     var params = {};
     global.location.hash.replace(/^#/, '').split('&').forEach(function (kv) {
       var i = kv.indexOf('=');
-      if (i > 0) params[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '));
+      if (i <= 0) return;
+      try {
+        params[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(kv.slice(i + 1).replace(/\+/g, ' '));
+      } catch (e) { /* zniekształcona sekwencja % — pomijamy parę */ }
     });
     return params;
   }
