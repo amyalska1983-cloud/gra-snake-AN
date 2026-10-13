@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Tło Kuźnia</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #0b0806; }
+  #stage { width: 1920px; height: 1080px; display: block; }
+</style>
+</head>
+<body>
+<svg id="stage" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- kamienna ściana: duże plamy + drobne ziarno, niski kontrast -->
+    <filter id="stone" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.0065 0.009" numOctaves="5" seed="7" result="big"/>
+      <feColorMatrix in="big" type="matrix"
+        values="0 0 0 0 0.16
+                0 0 0 0 0.11
+                0 0 0 0 0.08
+                0.32 0 0 0 -0.04" result="bigC"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="3" result="grain"/>
+      <feColorMatrix in="grain" type="matrix"
+        values="0 0 0 0 0.20
+                0 0 0 0 0.15
+                0 0 0 0 0.11
+                0.5 0 0 0 -0.2" result="grainC"/>
+      <feMerge><feMergeNode in="bigC"/><feMergeNode in="grainC"/></feMerge>
+    </filter>
+
+    <filter id="rockTex" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.02 0.035" numOctaves="4" seed="11" result="n"/>
+      <feColorMatrix in="n" type="matrix"
+        values="0 0 0 0 0.10
+                0 0 0 0 0.065
+                0 0 0 0 0.045
+                1.6 0 0 0 -0.55" result="c"/>
+      <feComposite in="c" in2="SourceGraphic" operator="in"/>
+    </filter>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="b1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="b2"/>
+      <feMerge><feMergeNode in="b1"/><feMergeNode in="b2"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="emberBlur" x="-200%" y="-200%" width="500%" height="500%">
+      <feGaussianBlur stdDeviation="1.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="40"/></filter>
+
+    <radialGradient id="vignette" cx="50%" cy="46%" r="75%">
+      <stop offset="0.45" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.85"/>
+    </radialGradient>
+    <radialGradient id="glowBottom" cx="50%" cy="100%" r="60%" fx="50%" fy="100%">
+      <stop offset="0" stop-color="#ff5a14" stop-opacity="0.38"/>
+      <stop offset="0.35" stop-color="#b0300c" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#3a0d02" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowCorner" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ff6a1a" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#a8320b" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#3a0d02" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="rockFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c130e"/>
+      <stop offset="0.5" stop-color="#0d0806"/>
+      <stop offset="1" stop-color="#040202"/>
+    </linearGradient>
+    <linearGradient id="rockFillBack" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24170f"/>
+      <stop offset="1" stop-color="#0a0604"/>
+    </linearGradient>
+    <linearGradient id="iron" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6b5532"/>
+      <stop offset="0.5" stop-color="#3a2d1c"/>
+      <stop offset="1" stop-color="#8a6a3a"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 1. ściana -->
+  <rect width="1920" height="1080" fill="#0c0806"/>
+  <rect width="1920" height="1080" filter="url(#stone)"/>
+
+  <!-- 2. poświata od dołu -->
+  <rect width="1920" height="1080" fill="url(#glowBottom)"/>
+  <ellipse cx="180" cy="1080" rx="520" ry="360" fill="url(#glowCorner)"/>
+  <ellipse cx="1740" cy="1080" rx="520" ry="360" fill="url(#glowCorner)"/>
+
+  <g id="rocks"></g>
+  <g id="embers"></g>
+
+  <!-- 3. winieta -->
+  <rect width="1920" height="1080" fill="url(#vignette)"/>
+
+  <g id="frame"></g>
+</svg>
+
+<script>
+// deterministyczny RNG — ten sam obraz przy każdym renderze
+let s = 20260929;
+const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+const R = (a, b) => a + rnd() * (b - a);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+};
+
+// grzbiet skały: wysoki przy krawędzi, opada w stronę środka
+function ridge(width, peak, mirror, jag) {
+  const pts = [];
+  const steps = 46;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    let h = peak * Math.pow(1 - t, 1.35) + R(-jag, jag) * (1 - t * 0.6);
+    if (i % 5 === 0) h += R(10, 45) * (1 - t);           // ostre iglice
+    h = Math.max(h, 0);
+    const x = t * width;
+    pts.push([mirror ? 1920 - x : x, 1080 - h - 8 * (1 - t)]);
+  }
+  pts.push([mirror ? 1920 - width : width, 1080]);
+  pts.push([mirror ? 1920 : 0, 1080]);
+  return pts;
+}
+const toPath = pts => 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L') + ' Z';
+
+// pęknięcie: błądzenie losowe z odgałęzieniami
+function crack(x, y, len, dir, out, depth) {
+  const pts = [[x, y]];
+  for (let i = 0; i < len; i++) {
+    dir += R(-0.55, 0.55);
+    x += Math.cos(dir) * R(10, 22);
+    y += Math.sin(dir) * R(10, 22);
+    pts.push([x, y]);
+    if (depth < 1 && rnd() < 0.09) crack(x, y, Math.floor(len * 0.45), dir + R(-1, 1), out, depth + 1);
+  }
+  out.push({ d: 'M' + pts.map(p => p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' L'), w: 2.2 - depth * 0.8 });
+}
+
+const rocks = document.getElementById('rocks');
+for (const mirror of [false, true]) {
+  const side = el('g', {}, rocks);
+  // tylna warstwa (głębia)
+  const back = toPath(ridge(R(620, 700), R(420, 470), mirror, 30));
+  el('path', { d: back, fill: 'url(#rockFillBack)', opacity: 0.85 }, side);
+  el('path', { d: back, fill: '#000', filter: 'url(#rockTex)', opacity: 0.6 }, side);
+  // przednia warstwa
+  const frontPts = ridge(R(460, 520), R(320, 370), mirror, 36);
+  const front = toPath(frontPts);
+  el('path', { d: front, fill: 'url(#rockFill)' }, side);
+  el('path', { d: front, fill: '#000', filter: 'url(#rockTex)', opacity: 0.7 }, side);
+  // rozświetlona krawędź grzbietu
+  el('path', { d: front, fill: 'none', stroke: '#ff7a2a', 'stroke-opacity': 0.22, 'stroke-width': 1.4 }, side);
+
+  // pęknięcia z lawą, przycięte do kształtu skały
+  const clipId = 'clip' + (mirror ? 'R' : 'L');
+  const cp = el('clipPath', { id: clipId }, document.querySelector('defs'));
+  el('path', { d: front }, cp);
+  el('path', { d: back }, cp);
+  const lava = el('g', { 'clip-path': `url(#${clipId})` }, side);
+  const cracks = [];
+  for (let k = 0; k < 6; k++) {
+    const x0 = mirror ? 1920 - R(10, 420) : R(10, 420);
+    const baseDir = -Math.PI / 2 + (mirror ? -1 : 1) * R(0.1, 0.7);
+    crack(x0, 1080 + R(0, 20), Math.floor(R(8, 14)), baseDir, cracks, 0);
+  }
+  for (const c of cracks) {
+    el('path', { d: c.d, fill: 'none', stroke: '#ff5a10', 'stroke-width': c.w * 2.2,
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round', filter: 'url(#glow)', opacity: 0.9 }, lava);
+    el('path', { d: c.d, fill: 'none', stroke: '#ffc06a', 'stroke-width': Math.max(c.w * 0.6, 0.6),
+      'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: 0.9 }, lava);
+  }
+}
+
+// iskry — gęściej przy dole i w rogach
+const embers = document.getElementById('embers');
+for (let i = 0; i < 190; i++) {
+  const corner = rnd() < 0.7;
+  const x = corner ? (rnd() < 0.5 ? R(0, 620) : R(1300, 1920)) : R(0, 1920);
+  const y = 1080 - Math.pow(rnd(), 1.8) * (corner ? 520 : 260);
+  const r = R(0.6, 2.4);
+  const hue = rnd();
+  const fill = hue < 0.5 ? '#ff8a2a' : hue < 0.85 ? '#ffb347' : '#ffe2a0';
+  const op = R(0.25, 0.95) * (1 - (1080 - y) / 700);
+  el('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: r.toFixed(2), fill, opacity: op.toFixed(2), filter: 'url(#emberBlur)' }, embers);
+  // smuga ruchu dla części iskier
+  if (rnd() < 0.3) {
+    const len = R(6, 18);
+    el('line', { x1: x, y1: y, x2: x - R(-4, 4), y2: y + len, stroke: fill, 'stroke-width': r * 0.7,
+      'stroke-linecap': 'round', opacity: (op * 0.45).toFixed(2) }, embers);
+  }
+}
+
+// żelazne okucia w rogach
+const frame = document.getElementById('frame');
+const M = 34, L1 = 150, L2 = 90;
+for (const [cx, cy, sx, sy] of [[0,0,1,1],[1920,0,-1,1],[0,1080,1,-1],[1920,1080,-1,-1]]) {
+  const g = el('g', { transform: `translate(${cx} ${cy}) scale(${sx} ${sy})`, opacity: 0.55 }, frame);
+  el('path', { d: `M${M} ${M + L1} L${M} ${M} L${M + L1} ${M}`, fill: 'none', stroke: 'url(#iron)',
+    'stroke-width': 3, 'stroke-linecap': 'square' }, g);
+  el('path', { d: `M${M + 10} ${M + L2} L${M + 10} ${M + 10} L${M + L2} ${M + 10}`, fill: 'none',
+    stroke: '#5a4628', 'stroke-width': 1.2, opacity: 0.7 }, g);
+  for (const [rx, ry] of [[M, M], [M + L1, M], [M, M + L1]]) {
+    el('circle', { cx: rx, cy: ry, r: 4.2, fill: '#2a2015', stroke: '#8a6a3a', 'stroke-width': 1 }, g);
+    el('circle', { cx: rx - 1, cy: ry - 1, r: 1.3, fill: '#c9a05a', opacity: 0.6 }, g);
+  }
+}
+</script>
+</body>
+</html>

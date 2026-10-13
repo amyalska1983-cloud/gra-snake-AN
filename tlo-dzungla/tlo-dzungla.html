@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<title>Tło Dżungla</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #06120a; }
+  #stage { width: 1920px; height: 1080px; display: block; }
+</style>
+</head>
+<body>
+<svg id="stage" viewBox="0 0 1920 1080" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- wilgotne, omszałe tło: duże plamy + drobne ziarno, niski kontrast -->
+    <filter id="moss" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.005 0.008" numOctaves="5" seed="5" result="big"/>
+      <feColorMatrix in="big" type="matrix"
+        values="0 0 0 0 0.07
+                0 0 0 0 0.20
+                0 0 0 0 0.10
+                0.34 0 0 0 -0.05" result="bigC"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="2" seed="9" result="grain"/>
+      <feColorMatrix in="grain" type="matrix"
+        values="0 0 0 0 0.10
+                0 0 0 0 0.22
+                0 0 0 0 0.12
+                0.45 0 0 0 -0.2" result="grainC"/>
+      <feMerge><feMergeNode in="bigC"/><feMergeNode in="grainC"/></feMerge>
+    </filter>
+
+    <filter id="haze"><feGaussianBlur stdDeviation="3"/></filter>
+    <filter id="rayBlur" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="glow" x="-300%" y="-300%" width="700%" height="700%">
+      <feGaussianBlur stdDeviation="5" result="b1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="b2"/>
+      <feMerge><feMergeNode in="b1"/><feMergeNode in="b2"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <radialGradient id="base" cx="50%" cy="38%" r="80%">
+      <stop offset="0" stop-color="#1f4a2a"/>
+      <stop offset="0.45" stop-color="#11301a"/>
+      <stop offset="1" stop-color="#05110a"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="50%" cy="48%" r="75%">
+      <stop offset="0.45" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#010603" stop-opacity="0.85"/>
+    </radialGradient>
+    <linearGradient id="ray" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8ffb0" stop-opacity="0.22"/>
+      <stop offset="0.6" stop-color="#b8f07a" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#b8f07a" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- liście: gradient od nasady do czubka, osobno dla każdej głębi -->
+    <linearGradient id="leafBack" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#21482a"/>
+      <stop offset="1" stop-color="#2f6236"/>
+    </linearGradient>
+    <linearGradient id="leafMid" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#123a1b"/>
+      <stop offset="0.7" stop-color="#22612b"/>
+      <stop offset="1" stop-color="#3b8a3a"/>
+    </linearGradient>
+    <linearGradient id="leafFront" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#041208"/>
+      <stop offset="1" stop-color="#0d2a12"/>
+    </linearGradient>
+
+    <!-- zwierzęta -->
+    <linearGradient id="araWing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2c230"/>
+      <stop offset="0.35" stop-color="#2f9e4a"/>
+      <stop offset="0.7" stop-color="#1f5fbf"/>
+      <stop offset="1" stop-color="#173f8c"/>
+    </linearGradient>
+    <linearGradient id="araTail" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c8231a"/>
+      <stop offset="0.6" stop-color="#b52018"/>
+      <stop offset="1" stop-color="#1f5fbf"/>
+    </linearGradient>
+    <linearGradient id="beak" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#7fbf3a"/>
+      <stop offset="0.35" stop-color="#f5c531"/>
+      <stop offset="0.75" stop-color="#f08a1c"/>
+      <stop offset="0.95" stop-color="#d4321c"/>
+      <stop offset="1" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="snakeBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f8f2a"/>
+      <stop offset="1" stop-color="#9ad43a"/>
+    </linearGradient>
+    <radialGradient id="morpho" cx="30%" cy="50%" r="80%">
+      <stop offset="0" stop-color="#7fd8ff"/>
+      <stop offset="0.55" stop-color="#1a7fe0"/>
+      <stop offset="0.85" stop-color="#0b3c9c"/>
+      <stop offset="1" stop-color="#050a18"/>
+    </radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- 1. tło -->
+  <rect width="1920" height="1080" fill="url(#base)"/>
+  <rect width="1920" height="1080" filter="url(#moss)"/>
+
+  <!-- 2. promienie światła przez korony drzew -->
+  <g id="rays" filter="url(#rayBlur)"></g>
+
+  <g id="back" filter="url(#haze)" opacity="0.75"></g>
+  <g id="mid"></g>
+  <g id="vines"></g>
+  <g id="front"></g>
+  <g id="animals" filter="url(#shadow)"></g>
+  <g id="flies"></g>
+
+  <!-- 3. winieta -->
+  <rect width="1920" height="1080" fill="url(#vignette)"/>
+</svg>
+
+<script>
+// deterministyczny RNG — ten sam obraz przy każdym renderze
+let s = 20261013;
+const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
+const R = (a, b) => a + rnd() * (b - a);
+const NS = 'http://www.w3.org/2000/svg';
+const el = (tag, attrs, parent) => {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  parent.appendChild(e);
+  return e;
+};
+const f = n => n.toFixed(1);
+const DEG = 180 / Math.PI;
+
+// liść w lokalnym układzie: nasada w (0,0), czubek w (len,0)
+function leaf(parent, x, y, angle, len, w, fill, rib) {
+  const d = `M0 0 C${f(len * 0.22)} ${f(-w)} ${f(len * 0.72)} ${f(-w * 0.85)} ${f(len)} 0 ` +
+            `C${f(len * 0.72)} ${f(w * 0.85)} ${f(len * 0.22)} ${f(w)} 0 0 Z`;
+  const g = el('g', { transform: `translate(${f(x)} ${f(y)}) rotate(${f(angle * DEG)})` }, parent);
+  el('path', { d, fill }, g);
+  if (rib) el('path', { d: `M0 0 Q${f(len * 0.5)} ${f(w * 0.08)} ${f(len * 0.93)} 0`, fill: 'none',
+    stroke: rib, 'stroke-width': Math.max(w * 0.07, 0.8), opacity: 0.55, 'stroke-linecap': 'round' }, g);
+}
+
+// liść palmowy: łodyga ugina się pod ciężarem, listki po obu stronach
+function frond(parent, x, y, angle, len, fill, rib, stemColor) {
+  const n = Math.floor(len / 14);
+  const pts = [];
+  let a = angle, px = x, py = y;
+  const droop = R(0.012, 0.022) * (Math.cos(angle) < 0 ? -1 : 1);
+  for (let i = 0; i <= n; i++) {
+    pts.push([px, py, a]);
+    a += droop;
+    px += Math.cos(a) * len / n;
+    py += Math.sin(a) * len / n;
+  }
+  el('path', { d: 'M' + pts.map(p => f(p[0]) + ' ' + f(p[1])).join(' L'), fill: 'none',
+    stroke: stemColor, 'stroke-width': 3, 'stroke-linecap': 'round' }, parent);
+  for (let i = 2; i < pts.length; i++) {
+    const t = i / pts.length;
+    const l = len * 0.38 * Math.sin(Math.PI * (0.15 + 0.85 * t)) * R(0.85, 1.1);
+    for (const side of [-1, 1]) {
+      leaf(parent, pts[i][0], pts[i][1], pts[i][2] + side * R(0.75, 1.05), l, l * 0.13, fill, rib);
+    }
+  }
+}
+
+// szeroki liść (kolokazja) z nasadą sercowatą
+function bigLeaf(parent, x, y, angle, len, fill, rib) {
+  leaf(parent, x, y, angle, len, len * 0.42, fill, rib);
+  const g = el('g', { transform: `translate(${f(x)} ${f(y)}) rotate(${f(angle * DEG)})` }, parent);
+  for (let k = 1; k <= 4; k++) {
+    for (const side of [-1, 1]) {
+      const sx = len * k * 0.17;
+      el('path', { d: `M${f(sx)} 0 Q${f(sx + len * 0.12)} ${f(side * len * 0.18)} ${f(sx + len * 0.2)} ${f(side * len * 0.3 * (1 - k * 0.15))}`,
+        fill: 'none', stroke: rib, 'stroke-width': 1, opacity: 0.35 }, g);
+    }
+  }
+}
+
+// kępa roślin wyrastająca z punktu przy krawędzi, kierunek w stronę środka
+function cluster(layer, x, y, dir, count, size, fill, rib, stem) {
+  for (let i = 0; i < count; i++) {
+    const a = dir + R(-0.8, 0.8);
+    if (rnd() < 0.62) frond(layer, x + R(-30, 30), y + R(-30, 30), a, size * R(0.7, 1.1), fill, rib, stem);
+    else bigLeaf(layer, x + R(-40, 40), y + R(-40, 40), a, size * R(0.4, 0.62), fill, rib);
+  }
+}
+
+// promienie światła — ukośne smugi z góry
+const rays = document.getElementById('rays');
+for (let i = 0; i < 7; i++) {
+  const x = R(300, 1500), w = R(40, 140), sk = R(180, 380);
+  el('polygon', { points: `${f(x)},-20 ${f(x + w)},-20 ${f(x + w * 2.4 + sk)},1100 ${f(x + sk)},1100`,
+    fill: 'url(#ray)', opacity: R(0.5, 1).toFixed(2) }, rays);
+}
+
+// warstwa tylna — jaśniejsza, rozmyta, sięga dalej w głąb
+const back = document.getElementById('back');
+for (let i = 0; i < 14; i++) {
+  const left = i % 2 === 0;
+  const x = left ? R(-60, 260) : R(1660, 1980);
+  const y = R(-60, 1140);
+  cluster(back, x, y, left ? R(-0.4, 0.4) : Math.PI + R(-0.4, 0.4), 3, R(260, 380), 'url(#leafBack)', '#3d7a42', '#1d3d22');
+}
+
+// warstwa środkowa — pełne kolory, wyraźne żyłki
+const mid = document.getElementById('mid');
+const midSpots = [
+  [-30, 1110, -0.7], [1950, 1110, Math.PI + 0.7], [-30, -30, 0.7], [1950, -30, Math.PI - 0.7],
+  [-40, 540, 0], [1960, 540, Math.PI], [520, 1130, -1.3], [1400, 1130, -1.85]
+];
+for (const [x, y, dir] of midSpots) cluster(mid, x, y, dir, 5, R(300, 400), 'url(#leafMid)', '#7fc46a', '#173d1c');
+
+// liany zwisające z góry z drobnymi listkami
+const vines = document.getElementById('vines');
+for (let i = 0; i < 16; i++) {
+  const x0 = i < 8 ? R(0, 700) : R(1220, 1920);
+  const len = R(220, 620);
+  const amp = R(8, 26), freq = R(0.008, 0.02), ph = R(0, 6.28);
+  const pts = [];
+  for (let y = -10; y <= len; y += 10) pts.push([x0 + Math.sin(y * freq + ph) * amp + y * 0.05, y]);
+  el('path', { d: 'M' + pts.map(p => f(p[0]) + ' ' + f(p[1])).join(' L'), fill: 'none',
+    stroke: '#1b3a1c', 'stroke-width': R(2, 3.5).toFixed(1), 'stroke-linecap': 'round' }, vines);
+  for (let k = 3; k < pts.length; k += 3) {
+    const side = k % 2 ? 1 : -1;
+    const l = R(14, 26);
+    leaf(vines, pts[k][0], pts[k][1], Math.PI / 2 + side * R(0.7, 1.2), l, l * 0.38, k % 6 ? '#2a6a2c' : '#3c8a37', '#86c96d');
+  }
+}
+
+// warstwa przednia — ciemne sylwetki w rogach, ramują kadr
+const front = document.getElementById('front');
+for (const [x, y, dir] of [[-60, 1140, -0.55], [1980, 1140, Math.PI + 0.55], [-60, -60, 0.6], [1980, -60, Math.PI - 0.6]]) {
+  cluster(front, x, y, dir, 4, R(340, 440), 'url(#leafFront)', '#1f4a24', '#06160a');
+}
+
+// zwierzęta — rysowane ręcznie w lokalnym układzie (0,0 = punkt podparcia)
+const animals = document.getElementById('animals');
+const put = (x, y, sc, svg, rot = 0) => {
+  const g = el('g', { transform: `translate(${x} ${y}) rotate(${rot}) scale(${sc})` }, animals);
+  g.innerHTML = svg;
+};
+
+// gałąź z mchem
+function branch(d) {
+  el('path', { d, fill: 'none', stroke: '#2e2113', 'stroke-width': 20, 'stroke-linecap': 'round' }, animals);
+  el('path', { d, fill: 'none', stroke: '#4a3620', 'stroke-width': 8, 'stroke-linecap': 'round', opacity: 0.7,
+    transform: 'translate(0 -4)' }, animals);
+  el('path', { d, fill: 'none', stroke: '#4f8f34', 'stroke-width': 6, 'stroke-dasharray': '18 26',
+    'stroke-linecap': 'round', opacity: 0.8, transform: 'translate(0 -9)' }, animals);
+}
+
+// ara — patrzy w prawo
+const ARA = `
+  <path d="M-8 -40 L-30 150 L-14 152 L4 -36 Z" fill="url(#araTail)"/>
+  <path d="M2 -40 L-6 135 L8 136 L14 -38 Z" fill="url(#araTail)" opacity="0.85"/>
+  <ellipse cx="0" cy="-62" rx="30" ry="52" fill="#d42a1f" transform="rotate(-8 0 -62)"/>
+  <path d="M-26 -92 Q28 -88 22 4 Q-14 -6 -26 -92 Z" fill="url(#araWing)"/>
+  <path d="M-16 -60 Q8 -50 12 -14 M-8 -76 Q14 -66 18 -30" stroke="#0c2f6e" stroke-width="1.5" fill="none" opacity="0.5"/>
+  <circle cx="8" cy="-118" r="23" fill="#d42a1f"/>
+  <ellipse cx="18" cy="-117" rx="11" ry="9" fill="#f4efe6"/>
+  <circle cx="18" cy="-120" r="3.4" fill="#111"/>
+  <circle cx="19" cy="-121.2" r="1.1" fill="#fff"/>
+  <path d="M27 -128 Q50 -126 42 -98 Q36 -108 27 -108 Z" fill="#ece5d2"/>
+  <path d="M27 -108 Q36 -104 38 -100 Q30 -98 27 -102 Z" fill="#222"/>
+  <path d="M-8 -4 l-6 10 M0 -4 l0 11 M8 -4 l6 10" stroke="#5a5550" stroke-width="4" stroke-linecap="round"/>`;
+
+// tukan — patrzy w lewo
+const TUKAN = `
+  <path d="M-4 -30 L14 70 Q8 78 -6 74 L-18 -26 Z" fill="#111"/>
+  <ellipse cx="0" cy="-58" rx="30" ry="50" fill="#141414" transform="rotate(6 0 -58)"/>
+  <ellipse cx="6" cy="-22" rx="14" ry="7" fill="#d4321c"/>
+  <ellipse cx="-14" cy="-86" rx="19" ry="22" fill="#f6d24a"/>
+  <circle cx="-2" cy="-112" r="23" fill="#141414"/>
+  <path d="M-18 -124 C-70 -134 -116 -114 -128 -96 C-96 -94 -56 -96 -18 -100 Z" fill="url(#beak)"/>
+  <path d="M-18 -111 Q-70 -110 -124 -98" stroke="#1a1a1a" stroke-width="1.5" fill="none" opacity="0.6"/>
+  <circle cx="-12" cy="-116" r="8" fill="#4fb3e8"/>
+  <circle cx="-12" cy="-116" r="3.6" fill="#0a0a0a"/>
+  <circle cx="-11" cy="-117.4" r="1.2" fill="#fff"/>
+  <path d="M-8 -4 l-6 10 M0 -4 l0 11 M8 -4 l6 10" stroke="#3b4a6a" stroke-width="4" stroke-linecap="round"/>`;
+
+// czerwonooka żaba drzewna — patrzy w prawo
+const ZABA = `
+  <ellipse cx="-30" cy="-14" rx="24" ry="11" fill="#4fae33" transform="rotate(-12 -30 -14)"/>
+  <path d="M-52 -6 q-8 4 -12 2 M-50 -3 q-6 8 -10 9" stroke="#f08a1c" stroke-width="4" stroke-linecap="round" fill="none"/>
+  <ellipse cx="0" cy="-28" rx="42" ry="24" fill="#5ec43a"/>
+  <path d="M-34 -18 Q0 -4 30 -16 Q0 -10 -34 -18 Z" fill="#2a5fc4"/>
+  <path d="M-24 -14 l2 -8 M-10 -11 l2 -9 M4 -11 l1 -9" stroke="#f2d64a" stroke-width="2.5" stroke-linecap="round"/>
+  <ellipse cx="0" cy="-36" rx="34" ry="12" fill="#74d64c" opacity="0.6"/>
+  <ellipse cx="32" cy="-36" rx="22" ry="16" fill="#5ec43a"/>
+  <path d="M18 -6 q4 -12 10 -16" stroke="#4fae33" stroke-width="8" stroke-linecap="round" fill="none"/>
+  <circle cx="16" cy="-4" r="3.5" fill="#f08a1c"/><circle cx="22" cy="-2" r="3.5" fill="#f08a1c"/>
+  <circle cx="20" cy="-55" r="9" fill="#b51d14"/>
+  <circle cx="36" cy="-54" r="11" fill="#e0261c"/>
+  <ellipse cx="37" cy="-54" rx="2.5" ry="7" fill="#0a0a0a"/>
+  <circle cx="39.5" cy="-58" r="2" fill="#fff" opacity="0.85"/>
+  <path d="M30 -28 Q42 -26 52 -32" stroke="#2c6a1c" stroke-width="1.5" fill="none"/>`;
+
+// motyl morpho
+const MOTYL = `
+  <path d="M-2 -4 C-14 -34 -44 -46 -54 -34 C-60 -22 -46 -6 -2 0 Z" fill="url(#morpho)" stroke="#050a18" stroke-width="2.5"/>
+  <path d="M2 -4 C14 -34 44 -46 54 -34 C60 -22 46 -6 2 0 Z" fill="url(#morpho)" stroke="#050a18" stroke-width="2.5"/>
+  <path d="M-2 2 C-30 4 -42 18 -36 30 C-28 40 -10 30 -2 8 Z" fill="url(#morpho)" stroke="#050a18" stroke-width="2.5"/>
+  <path d="M2 2 C30 4 42 18 36 30 C28 40 10 30 2 8 Z" fill="url(#morpho)" stroke="#050a18" stroke-width="2.5"/>
+  <circle cx="-44" cy="-32" r="2.2" fill="#fff" opacity="0.8"/><circle cx="44" cy="-32" r="2.2" fill="#fff" opacity="0.8"/>
+  <ellipse cx="0" cy="0" rx="3" ry="18" fill="#1a1410"/>
+  <path d="M-1 -16 q-6 -12 -12 -16 M1 -16 q6 -12 12 -16" stroke="#1a1410" stroke-width="1.4" fill="none"/>`;
+
+branch('M-20 300 Q200 280 520 336');
+put(360, 316, 1.15, ARA);
+
+branch('M1940 370 Q1720 350 1440 410');
+put(1640, 372, 1.1, TUKAN);
+
+bigLeaf(animals, 40, 1000, -0.32, 380, 'url(#leafMid)', '#7fc46a');
+put(230, 930, 1.35, ZABA);
+
+// wąż na lianie — w końcu to Snake
+(() => {
+  const vx = 1330;
+  el('path', { d: `M${vx} -10 Q${vx + 14} 200 ${vx - 6} 360 Q${vx - 14} 430 ${vx + 4} 470`, fill: 'none',
+    stroke: '#24461f', 'stroke-width': 5, 'stroke-linecap': 'round' }, animals);
+  const pts = [];
+  for (let y = 120; y <= 470; y += 6) pts.push([vx + Math.sin(y * 0.045) * 26 * Math.min(1, (y - 110) / 60), y]);
+  const d = 'M' + pts.map(p => f(p[0]) + ' ' + f(p[1])).join(' L');
+  el('path', { d, fill: 'none', stroke: 'url(#snakeBody)', 'stroke-width': 15, 'stroke-linecap': 'round' }, animals);
+  el('path', { d, fill: 'none', stroke: '#174f17', 'stroke-width': 7, 'stroke-dasharray': '4 14',
+    'stroke-linecap': 'round', opacity: 0.8 }, animals);
+  const [hx, hy] = pts[pts.length - 1];
+  put(hx, hy, 1, `
+    <path d="M0 18 l-2 10 l-5 5 M-2 28 l4 6" stroke="#d4321c" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <ellipse cx="0" cy="6" rx="13" ry="16" fill="#9ad43a"/>
+    <circle cx="-6" cy="4" r="3.6" fill="#f2d64a"/><ellipse cx="-6" cy="4" rx="1.1" ry="3" fill="#111"/>
+    <circle cx="6" cy="4" r="3.6" fill="#f2d64a"/><ellipse cx="6" cy="4" rx="1.1" ry="3" fill="#111"/>`);
+})();
+
+put(600, 160, 1, MOTYL, 20);
+put(1440, 860, 0.9, MOTYL, -18);
+put(1560, 620, 0.6, MOTYL, 35);
+
+// świetliki — rzadziej w środku, gdzie leży plansza
+const flies = document.getElementById('flies');
+for (let i = 0; i < 120; i++) {
+  let x = R(0, 1920), y = R(0, 1080);
+  const center = Math.abs(x - 960) < 380 && Math.abs(y - 540) < 340;
+  if (center && rnd() < 0.8) continue;
+  const r = R(1, 3);
+  const c = rnd();
+  const fill = c < 0.55 ? '#d6ff6a' : c < 0.85 ? '#f4ff9e' : '#fff6c8';
+  el('circle', { cx: f(x), cy: f(y), r: r.toFixed(2), fill, opacity: R(0.35, 0.95).toFixed(2), filter: 'url(#glow)' }, flies);
+}
+</script>
+</body>
+</html>
