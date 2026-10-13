@@ -126,19 +126,22 @@
       to { opacity: 1; }
     }
     /* Kafel mgły ma 50vw szerokości, a warstwa przesuwa się dokładnie o jeden kafel — pętla bez szwu. */
+    /* --mist: 0–1 z suwaka; 0.5 odpowiada pierwotnej gęstości mgły. */
+    .ambient { --mist: 0.5; }
     .mist {
       position: absolute;
       left: 0;
       width: 200vw;
       height: 34vh;
       bottom: -6vh;
-      background: radial-gradient(ellipse at center, rgba(205, 230, 215, 0.16), transparent 65%) 0 0 / 50vw 100% repeat-x;
+      background: radial-gradient(ellipse at center, rgba(205, 230, 215, 0.32), transparent 65%) 0 0 / 50vw 100% repeat-x;
+      opacity: var(--mist);
       animation: mist 70s linear infinite;
     }
     .mist.far {
       bottom: 6vh;
       height: 24vh;
-      opacity: 0.6;
+      opacity: calc(var(--mist) * 0.6);
       animation-duration: 110s;
       animation-direction: reverse;
     }
@@ -189,6 +192,17 @@
       from { transform: scaleX(1); }
       to { transform: scaleX(0.25); }
     }
+    #fog-control {
+      position: fixed;
+      left: 16px;
+      bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      font-size: 14px;
+    }
+    #fog-control input { width: 140px; accent-color: #8bc34a; cursor: pointer; }
     @media (prefers-reduced-motion: reduce) {
       .ambient * { animation: none !important; }
       .butterfly { display: none; }
@@ -226,6 +240,9 @@
       <ol id="leaders"></ol>
     </aside>
   </div>
+  <label id="fog-control" class="panel">Mgła
+    <input id="fog" type="range" min="0" max="1" step="0.05" value="0.5">
+  </label>
 
   <script>
     // Świetliki i motyle tła. Losowe pozycje omijają środek ekranu, gdzie stoi plansza.
@@ -266,6 +283,23 @@
         '</svg>';
       var butterflies = document.querySelectorAll('.butterfly');
       for (var k = 0; k < butterflies.length; k++) butterflies[k].innerHTML = BUTTERFLY;
+
+      var FOG_KEY = 'syk-dzungli.mgla';
+      var fog = document.getElementById('fog');
+      try {
+        var saved = localStorage.getItem(FOG_KEY);
+        if (saved !== null) fog.value = saved;
+      } catch (e) { /* tryb prywatny — zostaje wartość domyślna */ }
+      function applyFog() {
+        ambient.style.setProperty('--mist', fog.value);
+      }
+      applyFog();
+      fog.addEventListener('input', applyFog);
+      fog.addEventListener('change', function () {
+        try { localStorage.setItem(FOG_KEY, fog.value); } catch (e) { /* bez zapamiętania */ }
+        // Fokus na suwaku przechwytywałby strzałki, które mają sterować wężem.
+        fog.blur();
+      });
     })();
   </script>
   <script src="snake-logic.js"></script>
