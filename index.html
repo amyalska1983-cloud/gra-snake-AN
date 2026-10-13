@@ -47,7 +47,7 @@
       var COLORS = {
         bg: '#10141c',
         grid: '#1a2030',
-        head: '#ffffff',
+        head: '#f5c46b',
         food: '#ef4444',
         text: '#e2e8f0'
       };
@@ -108,9 +108,11 @@
         ctx.fillRect(cell.x * CELL + inset, cell.y * CELL + inset, CELL - inset * 2, CELL - inset * 2);
       }
 
-      // Tęcza wzdłuż ciała: każdy segment przesunięty o stały odcień.
+      // Paleta kuźni: ciało faluje między pomarańczem żaru a bursztynem.
+      // Odcienie 24–42 trzymają się z dala od czerwieni jedzenia.
       function bodyColor(index) {
-        return 'hsl(' + ((index * 25) % 360) + ', 90%, 60%)';
+        var hue = 33 + 9 * Math.cos(index * 0.5);
+        return 'hsl(' + hue.toFixed(1) + ', 95%, 52%)';
       }
 
       function drawOverlay(lines) {
