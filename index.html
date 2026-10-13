@@ -58,16 +58,78 @@
         0 0 0 10px #1a1209,
         0 34px 60px rgba(0, 0, 0, 0.65);
     }
+    .layout {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+    }
+    .panel {
+      padding: 10px 16px;
+      border-radius: 12px;
+      background: rgba(4, 18, 8, 0.72);
+      border: 1px solid rgba(160, 220, 120, 0.25);
+    }
+    #player form, #whoami { display: flex; gap: 8px; align-items: center; }
+    /* display:flex powyżej nadpisałby atrybut hidden — bez tego widać wszystkie trzy widoki naraz */
+    #player [hidden] { display: none; }
+    #player { max-width: calc(100vw - 32px); box-sizing: border-box; }
+    #player form { flex-wrap: wrap; justify-content: center; }
+    #player input {
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(160, 220, 120, 0.35);
+      background: rgba(0, 0, 0, 0.35);
+      color: inherit;
+      font: inherit;
+    }
+    #player button {
+      padding: 6px 12px;
+      border: 0;
+      border-radius: 8px;
+      background: #8bc34a;
+      color: #0b1d08;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #msg { min-height: 1.2em; margin-top: 6px; font-size: 14px; color: #f2d64a; }
+    #msg:empty { display: none; }
+    #leaderboard { width: 210px; }
+    #leaderboard h2 { margin: 0 0 8px; font-size: 16px; letter-spacing: 0.04em; text-transform: uppercase; }
+    #leaders { margin: 0; padding-left: 22px; font-variant-numeric: tabular-nums; }
+    #leaders li { display: list-item; margin: 3px 0; }
+    #leaders .pts { float: right; font-weight: 600; }
   </style>
 </head>
 <body>
   <h1>Syk dżungli</h1>
   <div id="score">Punkty: 0</div>
-  <div class="stage">
-    <canvas id="board" width="480" height="480"></canvas>
+  <div id="player" class="panel">
+    <form id="login-form" hidden>
+      <input id="email" type="email" required placeholder="Twój e-mail" autocomplete="email">
+      <button type="submit">Wyślij link logowania</button>
+    </form>
+    <form id="nick-form" hidden>
+      <input id="nick" type="text" required minlength="3" maxlength="20" placeholder="Wybierz nick">
+      <button type="submit">Zapisz nick</button>
+    </form>
+    <div id="whoami" hidden>Grasz jako <strong id="nick-label"></strong> <button id="logout" type="button">Wyloguj</button></div>
+    <div id="msg" role="status"></div>
+  </div>
+  <div class="layout">
+    <div class="stage">
+      <canvas id="board" width="480" height="480"></canvas>
+    </div>
+    <aside id="leaderboard" class="panel">
+      <h2>Najlepsi</h2>
+      <ol id="leaders"></ol>
+    </aside>
   </div>
 
   <script src="snake-logic.js"></script>
+  <script src="snake-cloud.js"></script>
   <script>
     (function () {
       'use strict';
@@ -92,6 +154,130 @@
       var canvas = document.getElementById('board');
       var ctx = canvas.getContext('2d');
       var scoreEl = document.getElementById('score');
+      var C = window.SnakeCloud;
+      var loginForm = document.getElementById('login-form');
+      var nickForm = document.getElementById('nick-form');
+      var whoami = document.getElementById('whoami');
+      var emailInput = document.getElementById('email');
+      var nickInput = document.getElementById('nick');
+      var nickLabel = document.getElementById('nick-label');
+      var msgEl = document.getElementById('msg');
+      var leadersEl = document.getElementById('leaders');
+
+      var player = null;       // { nick } gdy zalogowany i z nickiem — tylko wtedy zapisujemy
+
+      var ERRORS = {
+        network: 'Brak połączenia — zapis niedostępny',
+        nick_taken: 'Ten nick jest zajęty',
+        over_email_send_rate_limit: 'Limit wysyłki linków — spróbuj za godzinę',
+        session_expired: 'Sesja wygasła — zaloguj się ponownie',
+        otp_expired: 'Link logowania wygasł — wyślij nowy'
+      };
+
+      function errorText(r) {
+        if (r.status === 429) return ERRORS.over_email_send_rate_limit;
+        return ERRORS[r.error] || 'Błąd: ' + r.error;
+      }
+
+      function say(text) {
+        msgEl.textContent = text || '';
+      }
+
+      // name: 'login' | 'nick' | 'player' | null (nic poza komunikatem)
+      function setView(name) {
+        loginForm.hidden = name !== 'login';
+        nickForm.hidden = name !== 'nick';
+        whoami.hidden = name !== 'player';
+      }
+
+      // Po kliknięciu przycisku fokus zostaje na nim, a Enter/Spacja kliknęłyby go ponownie zamiast sterować grą.
+      function releaseFocus() {
+        if (document.activeElement) document.activeElement.blur();
+      }
+
+      function refreshPlayer() {
+        if (!C.isSignedIn()) {
+          player = null;
+          setView('login');
+          return;
+        }
+        C.getPlayer().then(function (r) {
+          if (!r.ok) {
+            setView(C.isSignedIn() ? null : 'login');
+            say(errorText(r));
+            return;
+          }
+          if (!r.data) {
+            player = null;
+            setView('nick');
+            return;
+          }
+          player = r.data;
+          nickLabel.textContent = player.nick;
+          setView('player');
+          onPlayerReady();
+        });
+      }
+
+      function onPlayerReady() {}
+
+      function refreshLeaderboard() {
+        C.getLeaderboard().then(function (r) {
+          leadersEl.textContent = '';
+          if (!r.ok || !r.data.length) {
+            var empty = document.createElement('li');
+            empty.textContent = r.ok ? 'Jeszcze nikt nie grał' : 'Brak połączenia';
+            leadersEl.appendChild(empty);
+            return;
+          }
+          r.data.forEach(function (row) {
+            var li = document.createElement('li');
+            var pts = document.createElement('span');
+            pts.className = 'pts';
+            pts.textContent = row.score;
+            li.appendChild(pts);
+            li.appendChild(document.createTextNode(row.nick));
+            leadersEl.appendChild(li);
+          });
+        });
+      }
+
+      loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        releaseFocus();
+        var email = emailInput.value.trim();
+        say('Wysyłam link…');
+        C.sendMagicLink(email).then(function (r) {
+          say(r.ok ? 'Sprawdź skrzynkę ' + email + ' i kliknij link logowania' : errorText(r));
+        });
+      });
+
+      nickForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        releaseFocus();
+        C.createPlayer(nickInput.value.trim()).then(function (r) {
+          if (!r.ok) {
+            say(errorText(r));
+            return;
+          }
+          say('');
+          refreshPlayer();
+        });
+      });
+
+      document.getElementById('logout').addEventListener('click', function () {
+        releaseFocus();
+        C.signOut().then(function () {
+          player = null;
+          setView('login');
+          say('Wylogowano');
+        });
+      });
+
+      var boot = C.init();
+      if (boot.linkError) say(errorText({ error: boot.linkError }));
+      refreshPlayer();
+      refreshLeaderboard();
 
       var state = L.createState();
       var accumulator = 0;
