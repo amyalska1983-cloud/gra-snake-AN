@@ -96,6 +96,7 @@
       var state = L.createState();
       var accumulator = 0;
       var lastTime = null;
+      var playMs = 0;          // czas gry bez pauz — trafia do scores.duration_ms
 
       // Ostre rysowanie na ekranach o wysokiej gęstości pikseli.
       var W = state.cols * CELL;
@@ -107,23 +108,43 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       document.addEventListener('keydown', function (e) {
+        // Pisanie w polach formularza nie może sterować wężem (np. „wsad" w nicku).
+        var tag = e.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
         var key = e.key.toLowerCase();
         var dirName = KEY_TO_DIR[key];
         var isRestartKey = key === ' ' || key === 'enter';
 
         if (key.indexOf('arrow') === 0 || key === ' ') e.preventDefault();
 
-        if (dirName) {
+        if (key === 'p' || key === 'escape') {
+          togglePause();
+        } else if (dirName) {
           if (state.status === 'ready') {
             L.start(state);
+            accumulator = 0;
+          }
+          if (state.status === 'paused') {
+            L.resume(state);
             accumulator = 0;
           }
           if (state.status === 'running') L.enqueueDirection(state, L.DIRECTIONS[dirName]);
         } else if (isRestartKey && (state.status === 'over' || state.status === 'won')) {
           state = L.createState();
           accumulator = 0;
+          playMs = 0;
         }
       });
+
+      function togglePause() {
+        if (state.status === 'running') {
+          L.pause(state);
+        } else if (state.status === 'paused') {
+          L.resume(state);
+          accumulator = 0;
+        }
+      }
 
       function roundRect(c, x, y, w, h, r) {
         c.beginPath();
@@ -310,6 +331,8 @@
 
         if (state.status === 'ready') {
           drawOverlay(['Strzałki lub WSAD — start']);
+        } else if (state.status === 'paused') {
+          drawOverlay(['Pauza', 'P lub strzałka — wznów']);
         } else if (state.status === 'over') {
           drawOverlay(['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra']);
         } else if (state.status === 'won') {
@@ -323,6 +346,7 @@
         lastTime = now;
 
         if (state.status === 'running') {
+          playMs += Math.min(dt, 1000);
           // Górny limit akumulatora chroni przed lawiną kroków po powrocie z nieaktywnej karty.
           accumulator = Math.min(accumulator + dt, state.intervalMs * MAX_STEPS_PER_FRAME);
           var steps = 0;
