@@ -101,9 +101,108 @@
     #leaders { margin: 0; padding-left: 22px; font-variant-numeric: tabular-nums; }
     #leaders li { display: list-item; margin: 3px 0; }
     #leaders .pts { float: right; font-weight: 600; }
+
+    /* Animacje tła: warstwa nad zdjęciem, pod grą. Tylko transform i opacity — nie obciążają pętli gry. */
+    body > :not(.ambient) { position: relative; z-index: 1; }
+    .ambient {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .rays {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 35% 30% at 82% 20%, rgba(255, 196, 90, 0.35), transparent 70%),
+        linear-gradient(118deg, transparent 52%, rgba(255, 220, 140, 0.10) 56%, transparent 60%),
+        linear-gradient(124deg, transparent 60%, rgba(255, 220, 140, 0.08) 63%, transparent 67%);
+      mix-blend-mode: screen;
+      animation: rays 8s ease-in-out infinite alternate;
+    }
+    @keyframes rays {
+      from { opacity: 0.35; }
+      to { opacity: 1; }
+    }
+    /* Kafel mgły ma 50vw szerokości, a warstwa przesuwa się dokładnie o jeden kafel — pętla bez szwu. */
+    .mist {
+      position: absolute;
+      left: 0;
+      width: 200vw;
+      height: 34vh;
+      bottom: -6vh;
+      background: radial-gradient(ellipse at center, rgba(205, 230, 215, 0.16), transparent 65%) 0 0 / 50vw 100% repeat-x;
+      animation: mist 70s linear infinite;
+    }
+    .mist.far {
+      bottom: 6vh;
+      height: 24vh;
+      opacity: 0.6;
+      animation-duration: 110s;
+      animation-direction: reverse;
+    }
+    @keyframes mist {
+      from { transform: translateX(0); }
+      to { transform: translateX(-50vw); }
+    }
+    .firefly {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: #f4ff9e;
+      box-shadow: 0 0 8px 3px rgba(214, 255, 106, 0.7);
+      animation:
+        drift var(--d) ease-in-out var(--delay) infinite alternate,
+        glow var(--g) ease-in-out var(--delay) infinite alternate;
+    }
+    @keyframes drift {
+      to { transform: translate(var(--dx), var(--dy)); }
+    }
+    @keyframes glow {
+      from { opacity: 0.1; }
+      to { opacity: 1; }
+    }
+    .butterfly {
+      position: absolute;
+      left: 0;
+      width: 34px;
+      height: 26px;
+      animation: fly var(--t) linear var(--delay) infinite;
+    }
+    .butterfly svg { width: 100%; height: 100%; animation: bob 1.6s ease-in-out infinite alternate; }
+    .butterfly .wing { transform-box: fill-box; animation: flap 0.22s ease-in-out infinite alternate; }
+    .butterfly .wing.l { transform-origin: right center; }
+    .butterfly .wing.r { transform-origin: left center; }
+    .butterfly.back { animation-direction: reverse; }
+    .butterfly.back svg { transform: scaleX(-1); }
+    @keyframes fly {
+      from { transform: translateX(-60px); }
+      to { transform: translateX(calc(100vw + 60px)); }
+    }
+    @keyframes bob {
+      from { translate: 0 -14px; }
+      to { translate: 0 14px; }
+    }
+    @keyframes flap {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0.25); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ambient * { animation: none !important; }
+      .butterfly { display: none; }
+    }
   </style>
 </head>
 <body>
+  <div class="ambient" aria-hidden="true">
+    <div class="rays"></div>
+    <div class="mist far"></div>
+    <div class="mist"></div>
+    <div class="butterfly" style="top: 18vh; --t: 26s; --delay: 2s"></div>
+    <div class="butterfly back" style="top: 64vh; --t: 34s; --delay: 14s"></div>
+  </div>
   <h1>Syk dżungli</h1>
   <div id="score">Punkty: 0</div>
   <div id="player" class="panel">
@@ -128,6 +227,47 @@
     </aside>
   </div>
 
+  <script>
+    // Świetliki i motyle tła. Losowe pozycje omijają środek ekranu, gdzie stoi plansza.
+    (function () {
+      'use strict';
+
+      var ambient = document.querySelector('.ambient');
+      var FIREFLIES = 28;
+
+      function rand(a, b) {
+        return a + Math.random() * (b - a);
+      }
+
+      for (var i = 0; i < FIREFLIES; i++) {
+        var x = rand(0, 100);
+        var y = rand(0, 100);
+        if (x > 28 && x < 72 && y < 78) x = x < 50 ? rand(0, 28) : rand(72, 100);
+        var f = document.createElement('span');
+        f.className = 'firefly';
+        f.style.left = x.toFixed(1) + 'vw';
+        f.style.top = y.toFixed(1) + 'vh';
+        f.style.setProperty('--dx', rand(-60, 60).toFixed(0) + 'px');
+        f.style.setProperty('--dy', rand(-50, 50).toFixed(0) + 'px');
+        f.style.setProperty('--d', rand(6, 14).toFixed(1) + 's');
+        f.style.setProperty('--g', rand(1.2, 3.5).toFixed(1) + 's');
+        f.style.setProperty('--delay', (-rand(0, 10)).toFixed(1) + 's');
+        ambient.appendChild(f);
+      }
+
+      var BUTTERFLY =
+        '<svg viewBox="-28 -22 56 44">' +
+          '<defs><radialGradient id="mwing" cx="30%" cy="50%" r="80%">' +
+            '<stop offset="0" stop-color="#7fd8ff"/><stop offset="0.6" stop-color="#1a7fe0"/>' +
+            '<stop offset="1" stop-color="#06204f"/></radialGradient></defs>' +
+          '<g class="wing l"><path d="M-1 -2 C-10 -20 -26 -24 -26 -12 C-26 -2 -14 2 -1 1 Z M-1 2 C-16 4 -20 16 -12 18 C-6 19 -2 10 -1 4 Z" fill="url(#mwing)" stroke="#050a18" stroke-width="1.2"/></g>' +
+          '<g class="wing r"><path d="M1 -2 C10 -20 26 -24 26 -12 C26 -2 14 2 1 1 Z M1 2 C16 4 20 16 12 18 C6 19 2 10 1 4 Z" fill="url(#mwing)" stroke="#050a18" stroke-width="1.2"/></g>' +
+          '<ellipse cx="0" cy="0" rx="1.6" ry="9" fill="#1a1410"/>' +
+        '</svg>';
+      var butterflies = document.querySelectorAll('.butterfly');
+      for (var k = 0; k < butterflies.length; k++) butterflies[k].innerHTML = BUTTERFLY;
+    })();
+  </script>
   <script src="snake-logic.js"></script>
   <script src="snake-cloud.js"></script>
   <script>
