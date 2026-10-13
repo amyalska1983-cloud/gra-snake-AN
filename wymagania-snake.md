@@ -2,6 +2,7 @@
 
 - **Data:** 2026-09-29
 - **Status:** zatwierdzona, gotowa do planu implementacji
+- **Aktualizacja:** 2026-10-13 — wyniki i wznawianie (Supabase)
 - **Stos:** HTML5 + Canvas 2D + JavaScript (ES5/ES2015, bez modułów), zero zależności
 
 ## 1. Cel i zakres
@@ -10,14 +11,17 @@ Klasyczny Snake uruchamiany dwuklikiem na pliku `index.html`, bez serwera, bez `
 
 **W zakresie:** siatka, ruch, jedzenie, wzrost, punktacja, rosnące tempo, zawijanie planszy na krawędziach, kolizja z własnym ciałem, ekran startowy, ekran końca gry, ekran wygranej, restart, automatyczne testy logiki.
 
-**Poza zakresem:** rekordy w `localStorage`, poziomy trudności, przeszkody, bonusowe jedzenie, dźwięk, sterowanie dotykowe, tabela wyników, tryb dwuosobowy, animacje ruchu między komórkami.
+**Poza zakresem:** poziomy trudności, przeszkody, bonusowe jedzenie, dźwięk, sterowanie dotykowe, tryb dwuosobowy, animacje ruchu między komórkami.
+
+Wyniki, logowanie i wznawianie gry: `docs/superpowers/specs/2026-10-13-wyniki-i-wznawianie-design.md`.
 
 ## 2. Struktura plików
 
 | Plik | Odpowiedzialność | Zależności |
 |---|---|---|
 | `snake-logic.js` | Czysta logika gry. Zero DOM, zero Canvas, zero `window` poza jednym eksportem. | brak |
-| `index.html` | Prezentacja: Canvas, style, pętla czasu, rysowanie, odczyt klawiatury. | `snake-logic.js` |
+| `index.html` | Prezentacja: Canvas, style, pętla czasu, rysowanie, odczyt klawiatury. | `snake-logic.js`, `snake-cloud.js` |
+| `snake-cloud.js` | Klient Supabase na fetch: logowanie, zapis gry, wyniki. | brak |
 | `tests.html` | Runner testów logiki z wypisem wyników w przeglądarce. | `snake-logic.js` |
 
 Oba pliki HTML ładują logikę zwykłym `<script src="snake-logic.js"></script>`.
@@ -50,7 +54,7 @@ Oba pliki HTML ładują logikę zwykłym `<script src="snake-logic.js"></script>
   food: {x, y},
   score: 0,
   intervalMs: 125,
-  status: 'ready'         // 'ready' | 'running' | 'over' | 'won'
+  status: 'ready'         // 'ready' | 'running' | 'paused' | 'over' | 'won'
 }
 ```
 
@@ -78,6 +82,9 @@ Oś Y rośnie w dół (zgodnie z Canvas). Stan jest jedynym źródłem prawdy �
 - **Bufor kierunków:** wciśnięcia trafiają do `queue` (maks. 2 pozycje), nie prosto do `direction`. Bez bufora dwa szybkie skręty między krokami logiki (np. góra → lewo) omijają walidację i wprowadzają węża w samego siebie — dla gracza wygląda to jak błąd gry.
 - Walidacja kandydata odbywa się względem *ostatniego elementu kolejki*, a gdy kolejka jest pusta — względem `direction`. Duplikat bieżącego kierunku jest odrzucany.
 - `keydown` dla strzałek i spacji wywołuje `preventDefault()`, żeby strona się nie przewijała.
+- **Pauza:** `P` lub `Esc`; wznowienie `P` lub klawiszem kierunku.
+- **Oferta wznowienia zapisanej gry** (ekran startowy): `Enter` — wznów zapisaną grę, `N` — nowa gra; inne klawisze nic nie robią.
+- Gdy fokus jest w polu tekstowym (`INPUT`, `TEXTAREA`), gra ignoruje klawisze.
 
 ## 7. API `snake-logic.js`
 
@@ -90,6 +97,9 @@ Jeden obiekt globalny `window.SnakeLogic`:
 | `enqueueDirection` | `(state, dir) => boolean` | Dokłada kierunek do kolejki. `false` gdy odrzucony. |
 | `spawnFood` | `(state, rng?) => void` | Losuje jedzenie wyłącznie z pól wolnych od węża. |
 | `start` | `(state) => void` | `'ready'` → `'running'`. |
+| `pause` | `(state) => void` | `'running'` → `'paused'`; inne statusy bez zmian. |
+| `resume` | `(state) => void` | `'paused'` → `'running'`; inne statusy bez zmian. |
+| `restoreState` | `(obj) => state \| null` | Waliduje zapisany stan (np. z bazy); zwraca kopię w `'paused'` z pustą kolejką albo `null` dla stanu niemożliwego. |
 | `DIRECTIONS` | stała | `{ up, down, left, right }` jako wektory. |
 
 `rng` to opcjonalna funkcja zwracająca liczbę z `[0, 1)`; domyślnie `Math.random`. Wstrzykiwalność `rng` jest wymogiem, bez niej losowanie jedzenia nie da się przetestować deterministycznie.
@@ -100,10 +110,11 @@ Jeden obiekt globalny `window.SnakeLogic`:
 - Akumulator jest ograniczony z góry (maks. 5 kroków w jednej klatce), żeby po powrocie z nieaktywnej karty gra nie wykonała setek kroków naraz.
 - Nad planszą licznik: `Punkty: N`.
 - Nakładka na Canvas zależna od `status`:
-  - `ready` — „Strzałki lub WSAD — start"
-  - `over` — „Koniec gry · Punkty: N" + „Spacja — nowa gra"
+  - `ready` — „Strzałki lub WSAD — start"; gdy jest zapisana gra — „Wznów grę (N pkt) — Enter" + „Nowa gra — N"
+  - `paused` — „Pauza" + „P lub strzałka — wznów"
+  - `over` — „Koniec gry · Punkty: N" + „Spacja — nowa gra"; niezalogowany gracz widzi dodatkowo „Zaloguj się, aby zapisać wynik"
   - `won` — „Wygrana! Plansza zapełniona" + „Spacja — nowa gra"
-- Paleta: tło `#10141c`, delikatna siatka `#1a2030`, ciało węża `#22c55e`, głowa `#4ade80`, jedzenie `#ef4444`, tekst `#e2e8f0`.
+- Motyw dżungli, tytuł „Syk dżungli": plansza w szachownicę `#1f4a1c`/`#1a4118` z fazą kafelków i winietą, wąż w odcieniach 66–96 (limonka → złoto) z cieniem i odblaskiem, głowa złota z oczami patrzącymi w kierunku ruchu, jedzenie `#ef4444` z listkiem, tło strony `tlo-dzungla/tlo-dzungla.jpg`.
 - Głowa odróżniona kolorem od ciała, żeby kierunek był czytelny.
 
 ## 9. Kryteria akceptacji
@@ -133,6 +144,13 @@ Każdy punkt to osobna asercja; runner wypisuje nazwę i wynik.
 19. `spawnFood` z deterministycznym `rng` na planszy niemal pełnej trafia w jedyne wolne pole.
 20. `step` na stanie `'ready'`, `'over'` i `'won'` nie zmienia niczego.
 21. Zapełnienie planszy ustawia `status: 'won'`.
+22. `pause`: `'running'` → `'paused'`; `step` na stanie `'paused'` nic nie zmienia.
+23. `resume`: `'paused'` → `'running'`.
+24. `pause` i `resume` nie ruszają statusów `'ready'`, `'over'`, `'won'`.
+25. `restoreState` z poprawnego stanu zwraca kopię w `'paused'` z pustą kolejką.
+26. `restoreState` przyjmuje węża zawiniętego przez krawędź.
+27. `restoreState` przyjmuje stan w `'paused'`.
+28. `restoreState` odrzuca stany niemożliwe (m.in. zły rozmiar planszy, status `'over'`, rozerwany wąż, duplikat segmentu, jedzenie na wężu, punkty niezgodne z długością, interwał poza 55–125).
 
 ### 9.2 Weryfikacja ręczna (`index.html`)
 

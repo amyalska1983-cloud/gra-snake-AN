@@ -58,16 +58,78 @@
         0 0 0 10px #1a1209,
         0 34px 60px rgba(0, 0, 0, 0.65);
     }
+    .layout {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+    }
+    .panel {
+      padding: 10px 16px;
+      border-radius: 12px;
+      background: rgba(4, 18, 8, 0.72);
+      border: 1px solid rgba(160, 220, 120, 0.25);
+    }
+    #player form, #whoami { display: flex; gap: 8px; align-items: center; }
+    /* display:flex powyżej nadpisałby atrybut hidden — bez tego widać wszystkie trzy widoki naraz */
+    #player [hidden] { display: none; }
+    #player { max-width: calc(100vw - 32px); box-sizing: border-box; }
+    #player form { flex-wrap: wrap; justify-content: center; }
+    #player input {
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(160, 220, 120, 0.35);
+      background: rgba(0, 0, 0, 0.35);
+      color: inherit;
+      font: inherit;
+    }
+    #player button {
+      padding: 6px 12px;
+      border: 0;
+      border-radius: 8px;
+      background: #8bc34a;
+      color: #0b1d08;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #msg { min-height: 1.2em; margin-top: 6px; font-size: 14px; color: #f2d64a; }
+    #msg:empty { display: none; }
+    #leaderboard { width: 210px; }
+    #leaderboard h2 { margin: 0 0 8px; font-size: 16px; letter-spacing: 0.04em; text-transform: uppercase; }
+    #leaders { margin: 0; padding-left: 22px; font-variant-numeric: tabular-nums; }
+    #leaders li { display: list-item; margin: 3px 0; }
+    #leaders .pts { float: right; font-weight: 600; }
   </style>
 </head>
 <body>
   <h1>Syk dżungli</h1>
   <div id="score">Punkty: 0</div>
-  <div class="stage">
-    <canvas id="board" width="480" height="480"></canvas>
+  <div id="player" class="panel">
+    <form id="login-form" hidden>
+      <input id="email" type="email" required placeholder="Twój e-mail" autocomplete="email">
+      <button type="submit">Wyślij link logowania</button>
+    </form>
+    <form id="nick-form" hidden>
+      <input id="nick" type="text" required minlength="3" maxlength="20" placeholder="Wybierz nick">
+      <button type="submit">Zapisz nick</button>
+    </form>
+    <div id="whoami" hidden>Grasz jako <strong id="nick-label"></strong> <button id="logout" type="button">Wyloguj</button></div>
+    <div id="msg" role="status"></div>
+  </div>
+  <div class="layout">
+    <div class="stage">
+      <canvas id="board" width="480" height="480"></canvas>
+    </div>
+    <aside id="leaderboard" class="panel">
+      <h2>Najlepsi</h2>
+      <ol id="leaders"></ol>
+    </aside>
   </div>
 
   <script src="snake-logic.js"></script>
+  <script src="snake-cloud.js"></script>
   <script>
     (function () {
       'use strict';
@@ -92,10 +154,243 @@
       var canvas = document.getElementById('board');
       var ctx = canvas.getContext('2d');
       var scoreEl = document.getElementById('score');
+      var C = window.SnakeCloud;
+      var loginForm = document.getElementById('login-form');
+      var nickForm = document.getElementById('nick-form');
+      var whoami = document.getElementById('whoami');
+      var emailInput = document.getElementById('email');
+      var loginButton = loginForm.querySelector('button');
+      var nickInput = document.getElementById('nick');
+      var nickLabel = document.getElementById('nick-label');
+      var msgEl = document.getElementById('msg');
+      var leadersEl = document.getElementById('leaders');
+
+      var player = null;       // { nick } gdy zalogowany i z nickiem — tylko wtedy zapisujemy
+      var resumeOffer = null;  // { state, playMs } — zapis czekający na decyzję gracza
+      var lastSaveAt = 0;
+      var AUTOSAVE_MS = 5000;
+
+      // Zapisy idą po kolei: autozapis wysłany tuż przed końcem gry nie może
+      // dotrzeć po skasowaniu zapisu i „wskrzesić" zakończonej gry.
+      var writes = Promise.resolve();
+      function queueWrite(fn) {
+        writes = writes.then(fn).catch(function () {});
+        return writes;
+      }
+
+      function canSave() {
+        return !!player && (state.status === 'running' || state.status === 'paused');
+      }
+
+      function saveNow(keepalive) {
+        if (!canSave()) return;
+        lastSaveAt = performance.now();
+        // Kopia teraz, bo stan zmieni się, zanim zapis wyjdzie z kolejki.
+        var payload = JSON.parse(JSON.stringify({ state: state, playMs: playMs }));
+        queueWrite(function () {
+          return C.saveGame(payload, keepalive).then(function (r) {
+            if (r.ok) return;
+            if (sessionLost(r)) onSessionLost();
+            else say(errorText(r));
+          });
+        });
+      }
+
+      function discardSave() {
+        queueWrite(function () {
+          return C.deleteGame().then(function (r) {
+            if (sessionLost(r)) onSessionLost();
+          });
+        });
+      }
+
+      function submitScore(score, result, ms, retried) {
+        queueWrite(function () {
+          return C.submitScore(score, result, ms).then(function (r) {
+            if (r.ok) {
+              say('Wynik zapisany');
+              refreshLeaderboard();
+            } else if (sessionLost(r)) {
+              onSessionLost();
+            } else if (!retried) {
+              setTimeout(function () { submitScore(score, result, ms, true); }, 3000);
+            } else {
+              say(r.error === 'network' ? 'Brak połączenia — wynik nie zapisany' : errorText(r));
+            }
+          });
+        });
+      }
+
+      function onGameEnd() {
+        if (!player) return;
+        submitScore(state.score, state.status, playMs, false);
+        discardSave();
+      }
+
+      var ERRORS = {
+        network: 'Brak połączenia — zapis niedostępny',
+        nick_taken: 'Ten nick jest zajęty',
+        over_email_send_rate_limit: 'Limit wysyłki linków — spróbuj za godzinę',
+        session_expired: 'Sesja wygasła — zaloguj się ponownie',
+        otp_expired: 'Link logowania wygasł — wyślij nowy',
+        not_signed_in: 'Nie jesteś zalogowany',
+        // 23514 = naruszenie ograniczenia CHECK w Postgresie (długość nicku).
+        '23514': 'Nick musi mieć 3–20 znaków'
+      };
+
+      // not_signed_in przy ustawionym graczu znaczy, że sesję zabrał wcześniejszy nieudany refresh
+      // albo wylogowanie w innej karcie.
+      function sessionLost(r) {
+        return r.error === 'session_expired' || (r.error === 'not_signed_in' && !!player);
+      }
+
+      function onSessionLost() {
+        player = null;
+        resumeOffer = null;
+        setView('login');
+        say(ERRORS.session_expired);
+      }
+
+      function errorText(r) {
+        if (r.status === 429) return ERRORS.over_email_send_rate_limit;
+        return ERRORS[r.error] || 'Błąd: ' + r.error;
+      }
+
+      function say(text) {
+        msgEl.textContent = text || '';
+      }
+
+      // name: 'login' | 'nick' | 'player' | null (nic poza komunikatem)
+      function setView(name) {
+        loginForm.hidden = name !== 'login';
+        nickForm.hidden = name !== 'nick';
+        whoami.hidden = name !== 'player';
+      }
+
+      // Po kliknięciu przycisku fokus zostaje na nim, a Enter/Spacja kliknęłyby go ponownie zamiast sterować grą.
+      function releaseFocus() {
+        if (document.activeElement) document.activeElement.blur();
+      }
+
+      function refreshPlayer() {
+        if (!C.isSignedIn()) {
+          player = null;
+          setView('login');
+          return;
+        }
+        C.getPlayer().then(function (r) {
+          if (!r.ok) {
+            if (sessionLost(r)) {
+              onSessionLost();
+              return;
+            }
+            if (!C.isSignedIn()) player = null;
+            setView(C.isSignedIn() ? null : 'login');
+            say(errorText(r));
+            return;
+          }
+          if (!r.data) {
+            player = null;
+            setView('nick');
+            return;
+          }
+          player = r.data;
+          nickLabel.textContent = player.nick;
+          setView('player');
+          onPlayerReady();
+        });
+      }
+
+      function onPlayerReady() {
+        C.loadGame().then(function (r) {
+          if (sessionLost(r)) {
+            onSessionLost();
+            return;
+          }
+          // Wylogowanie w trakcie wczytywania — oferta wznowienia nie ma już sensu.
+          if (!player || !r.ok || !r.data) return;
+          var payload = r.data.state;
+          var restored = payload && L.restoreState(payload.state);
+          if (!restored) {
+            discardSave();
+            say('Zapis uszkodzony — zaczynasz od nowa');
+            return;
+          }
+          // Gra zaczęta, zanim zapis zdążył się wczytać, ma pierwszeństwo.
+          if (state.status !== 'ready') return;
+          resumeOffer = { state: restored, playMs: Number(payload.playMs) || 0 };
+        });
+      }
+
+      function refreshLeaderboard() {
+        C.getLeaderboard().then(function (r) {
+          leadersEl.textContent = '';
+          if (!r.ok || !r.data.length) {
+            var empty = document.createElement('li');
+            empty.textContent = r.ok ? 'Jeszcze nikt nie grał' : 'Brak połączenia';
+            leadersEl.appendChild(empty);
+            return;
+          }
+          r.data.forEach(function (row) {
+            var li = document.createElement('li');
+            var pts = document.createElement('span');
+            pts.className = 'pts';
+            pts.textContent = row.score;
+            li.appendChild(pts);
+            li.appendChild(document.createTextNode(row.nick));
+            leadersEl.appendChild(li);
+          });
+        });
+      }
+
+      loginForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        releaseFocus();
+        var email = emailInput.value.trim();
+        say('Wysyłam link…');
+        loginButton.disabled = true;
+        C.sendMagicLink(email).then(function (r) {
+          loginButton.disabled = false;
+          say(r.ok ? 'Sprawdź skrzynkę ' + email + ' i kliknij link logowania' : errorText(r));
+        });
+      });
+
+      nickForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        releaseFocus();
+        C.createPlayer(nickInput.value.trim()).then(function (r) {
+          if (sessionLost(r)) {
+            onSessionLost();
+            return;
+          }
+          if (!r.ok) {
+            say(errorText(r));
+            return;
+          }
+          say('');
+          refreshPlayer();
+        });
+      });
+
+      document.getElementById('logout').addEventListener('click', function () {
+        releaseFocus();
+        C.signOut().then(function () {
+          player = null;
+          resumeOffer = null;
+          setView('login');
+          say('Wylogowano');
+        });
+      });
+
+      var boot = C.init();
+      if (boot.linkError) say(errorText({ error: boot.linkError }));
+      refreshPlayer();
+      refreshLeaderboard();
 
       var state = L.createState();
       var accumulator = 0;
       var lastTime = null;
+      var playMs = 0;          // czas gry bez pauz — trafia do scores.duration_ms
 
       // Ostre rysowanie na ekranach o wysokiej gęstości pikseli.
       var W = state.cols * CELL;
@@ -107,21 +402,65 @@
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       document.addEventListener('keydown', function (e) {
+        // Pisanie w polach formularza nie może sterować wężem (np. „wsad" w nicku).
+        var tag = e.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
         var key = e.key.toLowerCase();
         var dirName = KEY_TO_DIR[key];
         var isRestartKey = key === ' ' || key === 'enter';
 
         if (key.indexOf('arrow') === 0 || key === ' ') e.preventDefault();
 
-        if (dirName) {
+        // Dopóki gracz nie wybierze „wznów" albo „nowa gra", inne klawisze nic nie robią.
+        if (resumeOffer && state.status === 'ready') {
+          if (key === 'enter') {
+            state = resumeOffer.state;
+            playMs = resumeOffer.playMs;
+            resumeOffer = null;
+            accumulator = 0;
+          } else if (key === 'n') {
+            resumeOffer = null;
+            discardSave();
+          }
+          return;
+        }
+
+        if (key === 'p' || key === 'escape') {
+          // Przytrzymany klawisz przełączałby pauzę w kółko i za każdym razem zapisywał.
+          if (e.repeat) return;
+          togglePause();
+        } else if (dirName) {
           if (state.status === 'ready') {
             L.start(state);
+            accumulator = 0;
+          }
+          if (state.status === 'paused') {
+            L.resume(state);
             accumulator = 0;
           }
           if (state.status === 'running') L.enqueueDirection(state, L.DIRECTIONS[dirName]);
         } else if (isRestartKey && (state.status === 'over' || state.status === 'won')) {
           state = L.createState();
           accumulator = 0;
+          playMs = 0;
+        }
+      });
+
+      function togglePause() {
+        if (state.status === 'running') {
+          L.pause(state);
+          saveNow(false);
+        } else if (state.status === 'paused') {
+          L.resume(state);
+          accumulator = 0;
+        }
+      }
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden && state.status === 'running') {
+          L.pause(state);
+          saveNow(true);
         }
       });
 
@@ -309,9 +648,15 @@
         scoreEl.textContent = 'Punkty: ' + state.score;
 
         if (state.status === 'ready') {
-          drawOverlay(['Strzałki lub WSAD — start']);
+          drawOverlay(resumeOffer
+            ? ['Wznów grę (' + resumeOffer.state.score + ' pkt) — Enter', 'Nowa gra — N']
+            : ['Strzałki lub WSAD — start']);
+        } else if (state.status === 'paused') {
+          drawOverlay(['Pauza', 'P lub strzałka — wznów']);
         } else if (state.status === 'over') {
-          drawOverlay(['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra']);
+          drawOverlay(player
+            ? ['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra']
+            : ['Koniec gry · Punkty: ' + state.score, 'Spacja — nowa gra', 'Zaloguj się, aby zapisać wynik']);
         } else if (state.status === 'won') {
           drawOverlay(['Wygrana! Plansza zapełniona', 'Spacja — nowa gra']);
         }
@@ -323,6 +668,7 @@
         lastTime = now;
 
         if (state.status === 'running') {
+          playMs += Math.min(dt, 1000);
           // Górny limit akumulatora chroni przed lawiną kroków po powrocie z nieaktywnej karty.
           accumulator = Math.min(accumulator + dt, state.intervalMs * MAX_STEPS_PER_FRAME);
           var steps = 0;
@@ -330,6 +676,11 @@
             accumulator -= state.intervalMs;
             L.step(state);
             steps++;
+          }
+          if (state.status === 'over' || state.status === 'won') {
+            onGameEnd();
+          } else if (now - lastSaveAt >= AUTOSAVE_MS) {
+            saveNow(false);
           }
         } else {
           accumulator = 0;

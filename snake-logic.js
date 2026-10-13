@@ -60,6 +60,73 @@
     if (state.status === 'ready') state.status = 'running';
   }
 
+  function pause(state) {
+    if (state.status === 'running') state.status = 'paused';
+  }
+
+  function resume(state) {
+    if (state.status === 'paused') state.status = 'running';
+  }
+
+  function isCell(c) {
+    return c !== null && typeof c === 'object' &&
+      Number.isInteger(c.x) && Number.isInteger(c.y) &&
+      c.x >= 0 && c.x < COLS && c.y >= 0 && c.y < ROWS;
+  }
+
+  // Sąsiedztwo z uwzględnieniem zawijania: kolumna 0 sąsiaduje z kolumną 19.
+  function isNeighbour(a, b) {
+    var dx = Math.abs(a.x - b.x);
+    var dy = Math.abs(a.y - b.y);
+    var nx = dx === 1 || dx === COLS - 1;
+    var ny = dy === 1 || dy === ROWS - 1;
+    return (nx && dy === 0) || (ny && dx === 0);
+  }
+
+  function isDirection(d) {
+    if (d === null || typeof d !== 'object') return false;
+    for (var k in DIRECTIONS) {
+      if (sameCell(DIRECTIONS[k], d)) return true;
+    }
+    return false;
+  }
+
+  // Dane z bazy są niezaufane: odrzucamy każdy stan, który nie mógł powstać w prawdziwej grze.
+  function restoreState(obj) {
+    if (obj === null || typeof obj !== 'object') return null;
+    if (obj.cols !== COLS || obj.rows !== ROWS) return null;
+    if (obj.status !== 'running' && obj.status !== 'paused') return null;
+
+    var snake = obj.snake;
+    // Wygranej gry (400 pól) się nie zapisuje, a 3 to długość startowa.
+    if (!Array.isArray(snake) || snake.length < 3 || snake.length >= COLS * ROWS) return null;
+    var seen = {};
+    for (var i = 0; i < snake.length; i++) {
+      var c = snake[i];
+      if (!isCell(c) || seen[c.x + ',' + c.y]) return null;
+      if (i > 0 && !isNeighbour(snake[i - 1], c)) return null;
+      seen[c.x + ',' + c.y] = true;
+    }
+
+    if (!isDirection(obj.direction)) return null;
+    if (!isCell(obj.food) || seen[obj.food.x + ',' + obj.food.y]) return null;
+    if (obj.score !== snake.length - 3) return null;
+    if (!Number.isInteger(obj.intervalMs) ||
+        obj.intervalMs < MIN_INTERVAL_MS || obj.intervalMs > START_INTERVAL_MS) return null;
+
+    return {
+      cols: COLS,
+      rows: ROWS,
+      snake: snake.map(function (s) { return { x: s.x, y: s.y }; }),
+      direction: { x: obj.direction.x, y: obj.direction.y },
+      queue: [],
+      food: { x: obj.food.x, y: obj.food.y },
+      score: obj.score,
+      intervalMs: obj.intervalMs,
+      status: 'paused'
+    };
+  }
+
   function enqueueDirection(state, dir) {
     if (state.queue.length >= MAX_QUEUE) return false;
     var ref = state.queue.length ? state.queue[state.queue.length - 1] : state.direction;
@@ -113,6 +180,9 @@
     enqueueDirection: enqueueDirection,
     spawnFood: spawnFood,
     start: start,
+    pause: pause,
+    resume: resume,
+    restoreState: restoreState,
     DIRECTIONS: DIRECTIONS
   };
 })(window);
