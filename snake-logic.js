@@ -8,6 +8,7 @@
   var SPEEDUP_MS = 4;
   var MIN_INTERVAL_MS = 55;
   var MAX_QUEUE = 2;
+  var TIME_LIMIT_MS = 60000;
 
   var DIRECTIONS = {
     up: { x: 0, y: -1 },
@@ -66,6 +67,11 @@
 
   function resume(state) {
     if (state.status === 'paused') state.status = 'running';
+  }
+
+  // Czas odmierza warstwa prezentacji (bez pauz); logika tylko kończy grę.
+  function timeUp(state) {
+    if (state.status === 'running' || state.status === 'paused') state.status = 'timeup';
   }
 
   function isCell(c) {
@@ -182,6 +188,8 @@
     start: start,
     pause: pause,
     resume: resume,
+    timeUp: timeUp,
+    TIME_LIMIT_MS: TIME_LIMIT_MS,
     restoreState: restoreState,
     DIRECTIONS: DIRECTIONS
   };
