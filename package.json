@@ -1,0 +1,12 @@
+{
+  "name": "syk-dzungli",
+  "private": true,
+  "description": "Gra Snake „Syk dżungli”. Sama gra nie ma zależności — npm służy tylko do testów Playwright.",
+  "scripts": {
+    "test": "playwright test",
+    "test:wzorce": "playwright test --update-snapshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

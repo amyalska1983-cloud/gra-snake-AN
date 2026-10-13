@@ -165,10 +165,19 @@ Każdy punkt to osobna asercja; runner wypisuje nazwę i wynik.
 5. Po zjedzeniu licznik punktów rośnie, a wąż wydłuża się widocznie.
 6. Po kilkunastu punktach gra jest wyraźnie szybsza niż na starcie.
 7. Dojście do krawędzi planszy przenosi węża na przeciwległą stronę i gra toczy się dalej — bez końca gry i bez utraty punktów.
-8. Ugryzienie własnego ciała pokazuje nakładkę końca gry z poprawnym wynikiem — to jedyny sposób na przegraną.
+8. Ugryzienie własnego ciała pokazuje nakładkę końca gry z poprawnym wynikiem; poza nim grę kończy tylko upływ 60 s.
 9. Spacja po przegranej startuje nową grę od zera punktów i tempa startowego.
 10. Strzałki i spacja nie przewijają strony.
 11. Przełączenie na inną kartę na kilkanaście sekund i powrót nie powoduje skokowego przeskoku węża.
+
+### 9.3 Testy Playwright (`testy-e2e/`)
+
+Sama gra dalej nie wymaga instalacji — npm jest potrzebny wyłącznie do tych testów. Używają zainstalowanego Chrome.
+
+- Instalacja: `npm install`. Uruchomienie: `npm test`. Odświeżenie wzorców po zamierzonej zmianie wyglądu: `npm run test:wzorce`.
+- `testy logiki w tests.html przechodzą` — otwiera `tests.html` i sprawdza, że zaliczone są wszystkie testy.
+- `przebieg gry` — 5 zrzutów porównywanych z wzorcami w `testy-e2e/zrzuty-wzorcowe/` (osobne dla systemu): ekran startowy, zdobyty punkt, pauza, ostatnie sekundy (czerwony zegar), „Czas minął!”. Przy każdym sprawdza też tekst licznika.
+- Powtarzalność: zegar strony steruje Playwright (`page.clock`), `Math.random` jest stały (jedzenie w (18, 9)), Supabase odpowiada pustą listą, animacje tła są wyłączone na czas zrzutu.
 
 ## 10. Decyzje odrzucone
 
@@ -178,4 +187,4 @@ Każdy punkt to osobna asercja; runner wypisuje nazwę i wynik.
 | Moduły ES | Blokowane przez CORS przy `file://` — psuje uruchamianie dwuklikiem. |
 | Koniec gry po uderzeniu w ścianę | Zastąpione zawijaniem planszy: wąż wychodzi poza krawędź i wraca po przeciwnej stronie. |
 | Siatka `<div>` zamiast Canvas | Wolniejsza i nietypowa dla gier 2D. |
-| Vitest / npm | Łamie założenie „bez instalacji i bez serwera". |
+| Vitest / npm do testów logiki | Łamie założenie „bez instalacji i bez serwera"; testy logiki zostają w `tests.html`. npm służy tylko do opcjonalnych testów Playwright (9.3). |
