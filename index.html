@@ -159,6 +159,7 @@
       var nickForm = document.getElementById('nick-form');
       var whoami = document.getElementById('whoami');
       var emailInput = document.getElementById('email');
+      var loginButton = loginForm.querySelector('button');
       var nickInput = document.getElementById('nick');
       var nickLabel = document.getElementById('nick-label');
       var msgEl = document.getElementById('msg');
@@ -189,17 +190,18 @@
         queueWrite(function () {
           return C.saveGame(payload, keepalive).then(function (r) {
             if (r.ok) return;
-            say(errorText(r));
-            if (r.error === 'session_expired') {
-              player = null;
-              setView('login');
-            }
+            if (sessionLost(r)) onSessionLost();
+            else say(errorText(r));
           });
         });
       }
 
       function discardSave() {
-        queueWrite(function () { return C.deleteGame(); });
+        queueWrite(function () {
+          return C.deleteGame().then(function (r) {
+            if (sessionLost(r)) onSessionLost();
+          });
+        });
       }
 
       function submitScore(score, result, ms, retried) {
@@ -208,6 +210,8 @@
             if (r.ok) {
               say('Wynik zapisany');
               refreshLeaderboard();
+            } else if (sessionLost(r)) {
+              onSessionLost();
             } else if (!retried) {
               setTimeout(function () { submitScore(score, result, ms, true); }, 3000);
             } else {
@@ -228,8 +232,24 @@
         nick_taken: 'Ten nick jest zajęty',
         over_email_send_rate_limit: 'Limit wysyłki linków — spróbuj za godzinę',
         session_expired: 'Sesja wygasła — zaloguj się ponownie',
-        otp_expired: 'Link logowania wygasł — wyślij nowy'
+        otp_expired: 'Link logowania wygasł — wyślij nowy',
+        not_signed_in: 'Nie jesteś zalogowany',
+        // 23514 = naruszenie ograniczenia CHECK w Postgresie (długość nicku).
+        '23514': 'Nick musi mieć 3–20 znaków'
       };
+
+      // not_signed_in przy ustawionym graczu znaczy, że sesję zabrał wcześniejszy nieudany refresh
+      // albo wylogowanie w innej karcie.
+      function sessionLost(r) {
+        return r.error === 'session_expired' || (r.error === 'not_signed_in' && !!player);
+      }
+
+      function onSessionLost() {
+        player = null;
+        resumeOffer = null;
+        setView('login');
+        say(ERRORS.session_expired);
+      }
 
       function errorText(r) {
         if (r.status === 429) return ERRORS.over_email_send_rate_limit;
@@ -260,6 +280,11 @@
         }
         C.getPlayer().then(function (r) {
           if (!r.ok) {
+            if (sessionLost(r)) {
+              onSessionLost();
+              return;
+            }
+            if (!C.isSignedIn()) player = null;
             setView(C.isSignedIn() ? null : 'login');
             say(errorText(r));
             return;
@@ -278,7 +303,12 @@
 
       function onPlayerReady() {
         C.loadGame().then(function (r) {
-          if (!r.ok || !r.data) return;
+          if (sessionLost(r)) {
+            onSessionLost();
+            return;
+          }
+          // Wylogowanie w trakcie wczytywania — oferta wznowienia nie ma już sensu.
+          if (!player || !r.ok || !r.data) return;
           var payload = r.data.state;
           var restored = payload && L.restoreState(payload.state);
           if (!restored) {
@@ -318,7 +348,9 @@
         releaseFocus();
         var email = emailInput.value.trim();
         say('Wysyłam link…');
+        loginButton.disabled = true;
         C.sendMagicLink(email).then(function (r) {
+          loginButton.disabled = false;
           say(r.ok ? 'Sprawdź skrzynkę ' + email + ' i kliknij link logowania' : errorText(r));
         });
       });
@@ -327,6 +359,10 @@
         e.preventDefault();
         releaseFocus();
         C.createPlayer(nickInput.value.trim()).then(function (r) {
+          if (sessionLost(r)) {
+            onSessionLost();
+            return;
+          }
           if (!r.ok) {
             say(errorText(r));
             return;
@@ -391,6 +427,8 @@
         }
 
         if (key === 'p' || key === 'escape') {
+          // Przytrzymany klawisz przełączałby pauzę w kółko i za każdym razem zapisywał.
+          if (e.repeat) return;
           togglePause();
         } else if (dirName) {
           if (state.status === 'ready') {

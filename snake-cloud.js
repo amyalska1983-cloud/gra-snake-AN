@@ -16,8 +16,11 @@
     return { ok: false, error: error, status: status || 0 };
   }
 
+  // null = brak zapisanej sesji; undefined = magazyn niedostępny (sesja żyje tylko w pamięci).
   function readStored() {
-    try { return JSON.parse(global.localStorage.getItem(SESSION_KEY)); } catch (e) { return null; }
+    var raw;
+    try { raw = global.localStorage.getItem(SESSION_KEY); } catch (e) { return undefined; }
+    try { return JSON.parse(raw); } catch (e) { return null; }
   }
 
   function store(s) {
@@ -94,6 +97,13 @@
 
   // Zapewnia ważny token przed wywołaniem wymagającym zalogowania.
   function authed(fn) {
+    // Inna karta mogła już odświeżyć token (nasz refresh token jest wtedy zużyty
+    // i jego ponowne użycie wylogowałoby wszędzie) albo się wylogować.
+    if (session) {
+      var stored = readStored();
+      if (stored === null) session = null;
+      else if (stored && stored.refreshToken !== session.refreshToken) session = stored;
+    }
     if (!session) return Promise.resolve(fail('not_signed_in'));
     var left = session.expiresAt - Math.floor(Date.now() / 1000);
     var ready = left < REFRESH_MARGIN_S ? refresh() : Promise.resolve({ ok: true });
@@ -148,7 +158,7 @@
 
   function signOut() {
     if (!session) return Promise.resolve({ ok: true });
-    return request('POST', '/auth/v1/logout', { auth: true }).then(function () {
+    return request('POST', '/auth/v1/logout?scope=local', { auth: true }).then(function () {
       store(null);
       return { ok: true };
     });
